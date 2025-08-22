@@ -7,44 +7,6 @@ type SpecResp = { source: "llm" | "mock"; spec: any; usage?: any; error?: string
 type JoinImg = { title: string; src: string };
 type JoinResp = { images: JoinImg[]; error?: string };
 type Round = { images: string[]; selected: number | null; note?: string };
-type SessionState = {
-  basePrompt: string;
-  refineText: string;
-  rounds: Round[];
-  idx: number;
-  style: string;
-  imgSize: "1024x1024"|"1024x1536"|"1536x1024"|"auto";
-  units: "in"|"mm";
-};
-
-/* ---------- IndexedDB helpers (simple key/value) ---------- */
-const DB_NAME = "cutlist-db";
-const STORE = "session";
-const KEY = "session-v1";
-function idbOpen(): Promise<IDBDatabase> {
-  return new Promise((res, rej) => {
-    const req = indexedDB.open(DB_NAME, 1);
-    req.onupgradeneeded = () => { const db = req.result; if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE); };
-    req.onsuccess = () => res(req.result);
-    req.onerror = () => rej(req.error);
-  });
-}
-function idbSet(key: string, val: any): Promise<void> {
-  return idbOpen().then(db => new Promise((res, rej) => {
-    const tx = db.transaction(STORE, "readwrite"); const st = tx.objectStore(STORE);
-    const req = st.put(val, key);
-    req.onsuccess = () => res(tx.oncomplete as any);
-    req.onerror = () => rej(req.error);
-  }));
-}
-function idbGet<T=any>(key: string): Promise<T|null> {
-  return idbOpen().then(db => new Promise((res, rej) => {
-    const tx = db.transaction(STORE, "readonly"); const st = tx.objectStore(STORE);
-    const req = st.get(key);
-    req.onsuccess = () => res((req.result ?? null) as T|null);
-    req.onerror = () => rej(req.error);
-  }));
-}
 
 /* ---------- Little UI helpers ---------- */
 function Btn(props: React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: "primary"|"ghost"|"soft" }) {
@@ -55,7 +17,7 @@ function Btn(props: React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: 
     soft: "bg-gray-100 text-gray-900 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-100 dark:hover:bg-gray-700",
     ghost: "border border-gray-300 text-gray-900 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-100 dark:hover:bg-gray-800",
   }[variant];
-  return <button className={`${base} ${styles} px-3 sm:px-4 py-2 ${className}`} {...rest} />;
+  return <button className={`${base} ${styles} px-4 py-2 ${className}`} {...rest} />;
 }
 function Card({children,className=""}:{children:any;className?:string}) {
   return <div className={`rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-sm ${className}`}>{children}</div>;
@@ -87,7 +49,6 @@ export default function Home() {
   /* Busy & error */
   const [loading, setLoading] = useState<null | "gen" | "refine" | "cutlist">(null);
   const [error, setError] = useState<string | null>(null);
-  const [banner, setBanner] = useState<string | null>(null); // shows "Restored autosave" etc.
 
   /* Spec/SVG */
   const [spec, setSpec] = useState<any>(null);
@@ -106,25 +67,32 @@ export default function Home() {
   const autoJoinReq = useRef(0);
   useEffect(() => {
     if (!current.images.length || current.selected === null) { setJoinImgs([]); return; }
-    setJoinImgs([]); // clear old preview immediately
+
+    // Clear old preview immediately so you don't see stale art
+    setJoinImgs([]);
+
     const reqId = ++autoJoinReq.current;
     const chosenImg = current.images[current.selected];
 
+    // Abort controllers so old requests can't update after a new click
     const acAnalyze = new AbortController();
     const acSpec    = new AbortController();
     const acJoin    = new AbortController();
 
     const run = async () => {
       try {
-        setLoadingJoin(true); setError(null);
+        setLoadingJoin(true);
+        setError(null);
 
-        // Analyze style (best-effort)
+        // (A) Analyze picked image for style cues (best-effort; skip on error)
         let styleRef = "";
         try {
           const ares = await fetch("/api/analyze-image", {
-            method: "POST", headers: { "Content-Type": "application/json" },
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ imageDataUrl: chosenImg, units, nonce: Date.now() }),
-            cache: "no-store", signal: acAnalyze.signal
+            cache: "no-store",
+            signal: acAnalyze.signal
           });
           const adat = await ares.json();
           if (reqId !== autoJoinReq.current) return;
@@ -132,23 +100,29 @@ export default function Home() {
             const s = adat.style;
             styleRef = `Match visual style: leg ${s.leg_shape}; apron ${s.apron_height}; edge ${s.top_edge}; wood ${s.wood}; tone ${s.color_tone}; ${s.keywords}.`;
           }
-        } catch (e:any) { if (e?.name !== "AbortError") {/* ignore */} }
+        } catch (e:any) {
+          if (e?.name !== "AbortError") {/* ignore analyze failures */}
+        }
 
-        // Spec from THIS exact image
+        // (B) Derive spec from THIS exact image
         const sres = await fetch("/api/spec-from-image", {
-          method: "POST", headers: { "Content-Type": "application/json" },
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ prompt: basePrompt, units, imageDataUrl: chosenImg, nonce: Date.now() }),
-          cache: "no-store", signal: acSpec.signal
+          cache: "no-store",
+          signal: acSpec.signal
         });
         const sdat: SpecResp = await sres.json();
         if (reqId !== autoJoinReq.current) return;
         if (!sres.ok) throw new Error((sdat as any)?.error || "Spec generation failed (joinery)");
 
-        // Joinery pics from that spec + style cues
+        // (C) Generate joinery pics using that spec + style cues
         const jres = await fetch("/api/joinery-images", {
-          method: "POST", headers: { "Content-Type": "application/json" },
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ spec: sdat.spec, count: 2, size: "1024x1024", style: styleRef, nonce: Date.now() }),
-          cache: "no-store", signal: acJoin.signal
+          cache: "no-store",
+          signal: acJoin.signal
         });
         const jdat: JoinResp = await jres.json();
         if (reqId !== autoJoinReq.current) return;
@@ -156,95 +130,18 @@ export default function Home() {
 
         setJoinImgs(jdat.images || []);
       } catch (e:any) {
-        if (e?.name !== "AbortError") setError(e?.message || "Joinery preview failed");
+        if (e?.name === "AbortError") return;
+        setError(e?.message || "Joinery preview failed");
       } finally {
         if (reqId === autoJoinReq.current) setLoadingJoin(false);
       }
     };
 
-    const timer = setTimeout(run, 300);
+    const timer = setTimeout(run, 300); // small debounce
     return () => { clearTimeout(timer); acAnalyze.abort(); acSpec.abort(); acJoin.abort(); };
   }, [idx, current.selected, current.images, basePrompt, units]);
 
-  /* -------- AUTOSAVE: load on mount, save on changes -------- */
-  useEffect(() => {
-    (async () => {
-      try {
-        const saved = await idbGet<SessionState>(KEY);
-        if (saved && saved.rounds?.length) {
-          setBasePrompt(saved.basePrompt);
-          setRefineText(saved.refineText);
-          setRounds(saved.rounds);
-          setIdx(Math.min(saved.idx ?? 0, Math.max(0, saved.rounds.length - 1)));
-          setStyle(saved.style);
-          setImgSize(saved.imgSize);
-          setUnits(saved.units);
-          setBanner("Restored autosave");
-          setTimeout(()=>setBanner(null), 2000);
-        }
-      } catch {/* ignore */}
-    })();
-  }, []);
-
-  // debounce save
-  const saveTimer = useRef<any>(null);
-  function scheduleSave() {
-    const snap: SessionState = { basePrompt, refineText, rounds, idx, style, imgSize, units };
-    if (saveTimer.current) clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(async () => {
-      try { await idbSet(KEY, snap); } catch {/* ignore */}
-    }, 300);
-  }
-  useEffect(() => { scheduleSave(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [basePrompt, refineText, rounds, idx, style, imgSize, units]);
-
-  /* Manual save/load/export/import */
-  async function saveNow() {
-    try { await idbSet(KEY, { basePrompt, refineText, rounds, idx, style, imgSize, units }); setBanner("Saved"); setTimeout(()=>setBanner(null), 1500); } catch(e:any){ setError(e.message); }
-  }
-  async function loadAutosave() {
-    try {
-      const saved = await idbGet<SessionState>(KEY);
-      if (saved && saved.rounds?.length) {
-        setBasePrompt(saved.basePrompt);
-        setRefineText(saved.refineText);
-        setRounds(saved.rounds);
-        setIdx(Math.min(saved.idx ?? 0, Math.max(0, saved.rounds.length - 1)));
-        setStyle(saved.style);
-        setImgSize(saved.imgSize);
-        setUnits(saved.units);
-        setBanner("Loaded autosave");
-        setTimeout(()=>setBanner(null), 1500);
-      } else setBanner("No autosave found");
-    } catch(e:any){ setError(e.message); }
-  }
-  function exportJson() {
-    const data: SessionState = { basePrompt, refineText, rounds, idx, style, imgSize, units };
-    const blob = new Blob([JSON.stringify(data)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a"); a.href = url; a.download = "cutlist-session.json"; a.click();
-    URL.revokeObjectURL(url);
-  }
-  function importJson(file: File) {
-    const fr = new FileReader();
-    fr.onload = () => {
-      try {
-        const s = JSON.parse(String(fr.result)) as SessionState;
-        if (!s || !Array.isArray(s.rounds)) throw new Error("Invalid file");
-        setBasePrompt(s.basePrompt ?? basePrompt);
-        setRefineText(s.refineText ?? "");
-        setRounds(s.rounds ?? []);
-        setIdx(Math.min(s.idx ?? 0, Math.max(0, (s.rounds ?? []).length - 1)));
-        setStyle(s.style ?? style);
-        setImgSize((s.imgSize as any) ?? imgSize);
-        setUnits((s.units as any) ?? units);
-        setBanner("Imported session");
-        setTimeout(()=>setBanner(null), 1500);
-      } catch (e:any) { setError(e.message || "Import failed"); }
-    };
-    fr.readAsText(file);
-  }
-
-  /* API helpers */
+  /* API Helpers */
   async function callImagesApi(body: any): Promise<GenResp> {
     const res = await fetch("/api/images", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     const data = await res.json();
@@ -264,8 +161,8 @@ export default function Home() {
 
   async function refineRound() {
     if (!rounds.length) { setError("Generate pictures first."); return; }
-    const cur = rounds[idx] || { images: [], selected: null };
-    if (cur.selected === null) { setError("Pick one picture to refine from."); return; }
+    const current = rounds[idx] || { images: [], selected: null };
+    if (current.selected === null) { setError("Pick one picture to refine from."); return; }
     try {
       setError(null); setLoading("refine"); setSpec(null); setShowSvg(false);
       const fullPrompt = `${basePrompt}. Reference the chosen concept (materials/proportions) and apply: ${refineText}.`;
@@ -291,11 +188,11 @@ export default function Home() {
   function nextRound(){ if (rounds.length>1) setIdx(i => (i + 1) % rounds.length); }
 
   async function generateCutList() {
-    const cur = rounds[idx] || { images: [], selected: null };
-    if (!rounds.length || cur.selected === null) { setError("Pick a final picture first."); return; }
+    const current = rounds[idx] || { images: [], selected: null };
+    if (!rounds.length || current.selected === null) { setError("Pick a final picture first."); return; }
     try {
       setError(null); setLoading("cutlist");
-      const chosen = cur.images[cur.selected];
+      const chosen = current.images[current.selected];
       const res = await fetch("/api/spec-from-image", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ prompt: basePrompt, units, imageDataUrl: chosen })
@@ -318,17 +215,10 @@ export default function Home() {
             <h1 className="text-base font-bold">Cut-List Builder</h1>
             <p className="text-xs text-gray-500">Prompt → 3 concepts → refine → finalize → cut list + SVG</p>
           </div>
-          <div className="ml-auto flex items-center gap-2">
-            <Btn variant="soft" onClick={saveNow}>Save now</Btn>
-            <Btn variant="soft" onClick={loadAutosave}>Load autosave</Btn>
-            <Btn variant="soft" onClick={exportJson}>Export .json</Btn>
-            <label className="inline-flex items-center cursor-pointer">
-              <input type="file" accept="application/json" className="hidden" onChange={(e)=>{ const f=e.target.files?.[0]; if (f) importJson(f); }} />
-              <span className="px-3 py-2 rounded-lg border border-gray-300 text-sm hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800">Import .json</span>
-            </label>
+          <div className="ml-auto text-xs hidden sm:flex items-center gap-2">
+            <span className="px-2 py-1 rounded-md bg-gray-100 dark:bg-gray-800">Rounds kept: 5</span>
           </div>
         </div>
-        {banner && <div className="text-center text-xs text-gray-600 dark:text-gray-300 py-1">{banner}</div>}
       </header>
 
       <main className="max-w-6xl mx-auto px-4 py-6 space-y-6">
@@ -344,12 +234,12 @@ export default function Home() {
             <div className="space-y-3">
               <label className="block text-xs text-gray-500">Units</label>
               <select className="w-full rounded-lg border bg-white dark:bg-gray-950 px-3 py-2 text-sm"
-                      value={units} onChange={e=>setUnits(e.target.value as any)}>
+                value={units} onChange={e=>setUnits(e.target.value as any)}>
                 <option value="in">inches</option><option value="mm">millimeters</option>
               </select>
               <label className="block text-xs text-gray-500 mt-3">Image size</label>
               <select className="w-full rounded-lg border bg-white dark:bg-gray-950 px-3 py-2 text-sm"
-                      value={imgSize} onChange={e=>setImgSize(e.target.value as any)}>
+                value={imgSize} onChange={e=>setImgSize(e.target.value as any)}>
                 <option value="1024x1024">1024×1024</option>
                 <option value="1024x1536">1024×1536</option>
                 <option value="1536x1024">1536×1024</option>
@@ -359,7 +249,7 @@ export default function Home() {
             <div className="space-y-3">
               <label className="block text-xs text-gray-500">Style</label>
               <select className="w-full rounded-lg border bg-white dark:bg-gray-950 px-3 py-2 text-sm"
-                      value={style} onChange={e=>setStyle(e.target.value)}>
+                value={style} onChange={e=>setStyle(e.target.value)}>
                 <option>Product render (clean, neutral light)</option>
                 <option>Photoreal (studio softbox, shallow DOF)</option>
                 <option>Blueprint (white lines on blue)</option>
@@ -403,7 +293,7 @@ export default function Home() {
 
         {/* Step 3 */}
         {rounds.length > 0 && (
-          <Section title="3) Refine" desc="Type extra instructions and get 3 refined images. Repeat; keeps last 5 rounds.">
+          <Section title="3) Refine" desc="Type extra instructions and get 3 refined images. Repeat until satisfied. Keeps last 5 rounds.">
             <div className="flex flex-col md:flex-row gap-3">
               <input className="flex-1 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-950 px-3 py-2 text-sm focus:ring-2 focus:ring-black dark:focus:ring-white"
                 value={refineText} onChange={e=>setRefineText(e.target.value)}
