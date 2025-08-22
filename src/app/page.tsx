@@ -1,308 +1,310 @@
 "use client";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState, useEffect } from "react";
 
+/* ---------- Types ---------- */
 type GenResp = { images: string[]; usedPrompt?: string };
 type SpecResp = { source: "llm" | "mock"; spec: any; usage?: any; error?: string };
 type JoinImg = { title: string; src: string };
 type JoinResp = { images: JoinImg[]; error?: string };
+type Round = { images: string[]; selected: number | null; note?: string };
 
-export default function Home() {
-  // Base prompt
-  const [prompt, setPrompt] = useState(
-    'Square end table, Shaker/Arts&Crafts style. 24"W x 24"D x 16"H. 1" solid top with small overhang; 1.75" square legs; 3.5" tall aprons; lower stretchers. Mortise & tenon.'
+/* ---------- Little UI helpers ---------- */
+function Btn(props: React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: "primary"|"ghost"|"soft" }) {
+  const { variant="primary", className="", ...rest } = props;
+  const base = "inline-flex items-center justify-center rounded-lg text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none";
+  const styles = {
+    primary: "bg-black text-white hover:bg-gray-800 focus:ring-black dark:bg-white dark:text-black dark:hover:bg-gray-100",
+    soft: "bg-gray-100 text-gray-900 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-100 dark:hover:bg-gray-700",
+    ghost: "border border-gray-300 text-gray-900 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-100 dark:hover:bg-gray-800",
+  }[variant];
+  return <button className={`${base} ${styles} px-4 py-2 ${className}`} {...rest} />;
+}
+function Card({children,className=""}:{children:any;className?:string}) {
+  return <div className={`rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-sm ${className}`}>{children}</div>;
+}
+function Section({title,desc,children}:{title:string;desc?:string;children:any}) {
+  return (
+    <Card className="p-4 sm:p-6">
+      <div className="mb-4">
+        <h2 className="text-lg font-semibold">{title}</h2>
+        {desc && <p className="text-sm text-gray-500 mt-1">{desc}</p>}
+      </div>
+      {children}
+    </Card>
   );
-  const [units, setUnits] = useState<"in" | "mm">("in");
-  const [count, setCount] = useState(3);
+}
 
-  // Refine controls
-  const [refine, setRefine] = useState("");
-  const [negative, setNegative] = useState("");
-  const [appendGallery, setAppendGallery] = useState(true);
-  const [imgSize, setImgSize] = useState<"1024x1024"|"1024x1536"|"1536x1024"|"auto">("1024x1024");
+/* ---------- Page ---------- */
+export default function Home() {
+  /* Flow state */
+  const [basePrompt, setBasePrompt] = useState('Square end table, Shaker/Arts&Crafts style. 24"W x 24"D x 16"H. Mortise & tenon.');
+  const [refineText, setRefineText] = useState("");
+  const [rounds, setRounds] = useState<Round[]>([]);
+  const [idx, setIdx] = useState(0); // current round index
   const [style, setStyle] = useState("Product render (clean, neutral light)");
+  const [imgSize, setImgSize] = useState<"1024x1024"|"1024x1536"|"1536x1024"|"auto">("1024x1024");
+  const [units, setUnits] = useState<"in"|"mm">("in");
+  const current = rounds[idx] || { images: [], selected: null };
 
-  // Gallery
-  const [imgs, setImgs] = useState<string[]>([]);
-  const [sel, setSel] = useState<Set<number>>(new Set());
-
-  // Spec + SVG (manual step)
-  const [spec, setSpec] = useState<any>(null);
-  const [src, setSrc] = useState<string | null>(null);
-  const [showSvg, setShowSvg] = useState(false);
-  const [svgNonce, setSvgNonce] = useState(0);
-
-  // Joinery previews
-  const [joinCount, setJoinCount] = useState(2);
-  const [joinImgs, setJoinImgs] = useState<JoinImg[]>([]);
-  const [loadingJoin, setLoadingJoin] = useState(false);
-
-  // Busy/error
-  const [loadingImgs, setLoadingImgs] = useState(false);
-  const [loadingSpec, setLoadingSpec] = useState(false);
+  /* Busy & error */
+  const [loading, setLoading] = useState<null | "gen" | "refine" | "cutlist">(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Derived
+  /* Spec/SVG */
+  const [spec, setSpec] = useState<any>(null);
+  const [srcFlag, setSrcFlag] = useState<string | null>(null);
+  const [showSvg, setShowSvg] = useState(false);
+  const [svgNonce, setSvgNonce] = useState(0);
   const svgUrl = useMemo(() => {
     if (!spec || !showSvg) return null;
     const encoded = encodeURIComponent(JSON.stringify(spec));
     return `/api/export/svg?spec=${encoded}&w=1200&joins=1&labelbg=1&fsmin=9&fsmax=12&t=${svgNonce}`;
   }, [spec, showSvg, svgNonce]);
 
-  const stylePresets = [
-    "Product render (clean, neutral light)",
-    "Photoreal (studio softbox, shallow DOF)",
-    "Blueprint (white lines on blue paper)",
-    "Pencil sketch (technical, cross-hatching)",
-    "Craft catalog (natural light, wood grain emphasis)"
-  ];
-
-  function toggle(i: number) {
-    setSel(prev => {
-      const next = new Set(prev);
-      next.has(i) ? next.delete(i) : next.add(i);
-      return next;
-    });
-  }
-  function selectAll() { setSel(new Set(imgs.map((_, i) => i))); }
-  function clearSel() { setSel(new Set()); }
-
-  async function callImagesApi(body: any) {
-    const res = await fetch("/api/images", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body)
-    });
-    const data: GenResp = await res.json();
-    if (!res.ok) throw new Error((data as any)?.error || "Image generation failed");
-    return data;
-  }
-
-  async function genImagesBase() {
-    try {
-      setError(null); setLoadingImgs(true);
-      const data = await callImagesApi({ prompt, count, size: imgSize, style });
-      setImgs(appendGallery ? [...data.images, ...imgs] : data.images);
-      setSel(new Set()); setJoinImgs([]); setShowSvg(false);
-    } catch (e: any) { setError(e.message); }
-    finally { setLoadingImgs(false); }
-  }
-
-  async function genImagesRefined() {
-    try {
-      setError(null); setLoadingImgs(true);
-      const data = await callImagesApi({ prompt, refine, negative, count, size: imgSize, style });
-      setImgs(appendGallery ? [...data.images, ...imgs] : data.images);
-      setSel(new Set()); setJoinImgs([]); setShowSvg(false);
-    } catch (e: any) { setError(e.message); }
-    finally { setLoadingImgs(false); }
-  }
-
-  // Per-image: "Refine like this" → analyze → prefill refine → regenerate
-  async function refineLikeThis(i: number) {
-    try {
-      setError(null); setLoadingImgs(true);
-      const imageDataUrl = imgs[i];
-      const ares = await fetch("/api/analyze-image", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ imageDataUrl, units })
-      });
-      const adat = await ares.json();
-      if (!ares.ok) throw new Error(adat?.error || "Analyze failed");
-
-      const s = adat.style || {};
-      const refinedText =
-        `match leg shape: ${s.leg_shape}; apron height: ${s.apron_height}; ` +
-        `top edge: ${s.top_edge}; wood/species: ${s.wood}; color/tone: ${s.color_tone}; ` +
-        `keywords: ${s.keywords}`;
-      setRefine(refinedText);
-
-      const data = await callImagesApi({ prompt, refine: refinedText, negative, count, size: imgSize, style });
-      setImgs(appendGallery ? [...data.images, ...imgs] : data.images);
-      setSel(new Set()); setJoinImgs([]); setShowSvg(false);
-    } catch (e: any) {
-      setError(e.message);
-    } finally {
-      setLoadingImgs(false);
-    }
-  }
-
-  // Cut list + SVG (manual when you're happy)
-  async function genSpecFromSelection() {
-    if (sel.size === 0) { setError("Pick one or more images first."); return; }
-    try {
-      setError(null); setLoadingSpec(true);
-      const imageDataUrls = Array.from(sel).map(i => imgs[i]).slice(0, 8);
-      const body = { prompt, units, imageDataUrls };
-      const res = await fetch("/api/spec-from-image", {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body)
-      });
-      const data: SpecResp = await res.json();
-      if (!res.ok) throw new Error(data?.error || "Spec generation failed");
-      setSpec(data.spec);
-      setSrc(data.source || null);
-      setShowSvg(true);
-      setSvgNonce(n => n + 1);
-    } catch (e: any) { setError(e.message); }
-    finally { setLoadingSpec(false); }
-  }
-
-  // Auto-joinery previews on selection (FAST, skip spec for speed)
+  /* Joinery quick previews (fast mode) */
+  const [joinImgs, setJoinImgs] = useState<JoinImg[]>([]);
+  const [loadingJoin, setLoadingJoin] = useState(false);
   const autoJoinReq = useRef(0);
   useEffect(() => {
-    if (sel.size === 0) { setJoinImgs([]); return; }
+    if (!current.images.length || current.selected === null) { setJoinImgs([]); return; }
     const reqId = ++autoJoinReq.current;
+    const chosenImg = current.images[current.selected];
     const timer = setTimeout(async () => {
       try {
-        setError(null); setLoadingJoin(true);
+        setLoadingJoin(true); setError(null);
         const jres = await fetch("/api/joinery-images", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ fast: true, prompt, units, count: joinCount, size: "1024x1024" })
+          body: JSON.stringify({ fast: true, prompt: basePrompt, units, count: 2, size: "1024x1024" })
         });
         const jdat: JoinResp = await jres.json();
         if (reqId !== autoJoinReq.current) return;
         if (!jres.ok) throw new Error(jdat?.error || "Joinery generation failed");
         setJoinImgs(jdat.images || []);
-      } catch (e: any) { setError(e.message); }
+      } catch (e:any) { setError(e.message); }
       finally { if (reqId === autoJoinReq.current) setLoadingJoin(false); }
-    }, 400);
+    }, 350);
     return () => clearTimeout(timer);
-  }, [sel, prompt, units, joinCount]);
+  }, [current.selected, current.images, basePrompt, units]);
 
+  /* API Helpers */
+  async function callImagesApi(body: any): Promise<GenResp> {
+    const res = await fetch("/api/images", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.error || "Image generation failed");
+    return data;
+  }
+
+  async function generateBase() {
+    try {
+      setError(null); setLoading("gen"); setSpec(null); setShowSvg(false);
+      const data = await callImagesApi({ prompt: basePrompt, count: 3, size: imgSize, style });
+      setRounds([{ images: data.images, selected: null, note: "base" }]);
+      setIdx(0);
+    } catch (e:any) { setError(e.message); }
+    finally { setLoading(null); }
+  }
+
+  async function refineRound() {
+    if (!rounds.length) { setError("Generate pictures first."); return; }
+    if (current.selected === null) { setError("Pick one picture to refine from."); return; }
+    try {
+      setError(null); setLoading("refine"); setSpec(null); setShowSvg(false);
+      const chosenImg = current.images[current.selected]; // keep for future use if needed
+      const fullPrompt = `${basePrompt}. Reference the chosen concept (materials/proportions) and apply: ${refineText}.`;
+      const data = await callImagesApi({ prompt: fullPrompt, count: 3, size: imgSize, style });
+      const next: Round = { images: data.images, selected: null, note: refineText || "(refine)" };
+      setRounds(prev => {
+        const arr = [...prev, next];
+        return arr.length > 5 ? arr.slice(arr.length - 5) : arr;
+      });
+      setIdx(i => Math.min(i + 1, 4));
+      setRefineText("");
+    } catch (e:any) { setError(e.message); }
+    finally { setLoading(null); }
+  }
+
+  function selectImage(i:number) {
+    if (!rounds.length) return;
+    const copy = rounds.slice();
+    copy[idx] = { ...copy[idx], selected: i };
+    setRounds(copy);
+  }
+  function prevRound(){ if (rounds.length>1) setIdx(i => (i - 1 + rounds.length) % rounds.length); }
+  function nextRound(){ if (rounds.length>1) setIdx(i => (i + 1) % rounds.length); }
+
+  async function generateCutList() {
+    if (!rounds.length || current.selected === null) { setError("Pick a final picture first."); return; }
+    try {
+      setError(null); setLoading("cutlist");
+      const chosen = current.images[current.selected];
+      const res = await fetch("/api/spec-from-image", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: basePrompt, units, imageDataUrl: chosen })
+      });
+      const data: SpecResp = await res.json();
+      if (!res.ok) throw new Error(data?.error || "Spec generation failed");
+      setSpec(data.spec); setSrcFlag(data.source || null);
+      setShowSvg(true); setSvgNonce(n => n + 1);
+    } catch (e:any) { setError(e.message); }
+    finally { setLoading(null); }
+  }
+
+  /* ---------- UI ---------- */
   return (
-    <main style={{ maxWidth: 1200, margin: "2rem auto", padding: "1rem" }}>
-      <h1 style={{ fontSize: 22, fontWeight: 800 }}>Cut-List Builder — Iterate until happy</h1>
-
-      <div style={{ display: "grid", gap: 12, gridTemplateColumns: "1fr auto auto auto auto" }}>
-        <textarea rows={4} style={{ width: "100%", padding: 10 }} value={prompt} onChange={(e) => setPrompt(e.target.value)} />
-        <div>
-          <label style={{ display: "block", fontSize: 12, color: "#444" }}>Units</label>
-          <select value={units} onChange={(e) => setUnits(e.target.value as any)} style={{ padding: 8 }}>
-            <option value="in">inches</option><option value="mm">millimeters</option>
-          </select>
-          <label style={{ display: "block", marginTop: 8, fontSize: 12, color: "#444" }}>Img size</label>
-          <select value={imgSize} onChange={(e)=>setImgSize(e.target.value as any)} style={{ padding: 8 }}>
-            <option value="1024x1024">1024×1024</option>
-            <option value="1024x1536">1024×1536</option>
-            <option value="1536x1024">1536×1024</option>
-            <option value="auto">auto</option>
-          </select>
-        </div>
-        <div>
-          <label style={{ display: "block", fontSize: 12, color: "#444" }}>Style</label>
-          <select value={style} onChange={(e)=>setStyle(e.target.value)} style={{ padding: 8, width: 260 }}>
-            {stylePresets.map((s) => <option key={s} value={s}>{s}</option>)}
-          </select>
-          <label style={{ display: "block", marginTop: 8, fontSize: 12, color: "#444" }}>Append to gallery</label>
-          <input type="checkbox" checked={appendGallery} onChange={(e)=>setAppendGallery(e.target.checked)} />
-        </div>
-        <div>
-          <label style={{ display: "block", fontSize: 12, color: "#444" }}>Refine (add)</label>
-          <input style={{ width: 260, padding: 8 }} value={refine} onChange={(e)=>setRefine(e.target.value)}
-                 placeholder='e.g., tapered legs, walnut, beveled top' />
-          <label style={{ display: "block", marginTop: 8, fontSize: 12, color: "#444" }}>Avoid</label>
-          <input style={{ width: 260, padding: 8 }} value={negative} onChange={(e)=>setNegative(e.target.value)}
-                 placeholder='e.g., glossy finish, metal legs' />
-        </div>
-        <div style={{ alignSelf: "end", display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <button onClick={genImagesBase} disabled={loadingImgs} style={{ padding: "8px 14px" }}>
-            {loadingImgs ? "Generating..." : "Generate (base)"}
-          </button>
-          <button onClick={genImagesRefined} disabled={loadingImgs} style={{ padding: "8px 14px" }}>
-            {loadingImgs ? "Generating..." : "Regenerate (refine)"}
-          </button>
-        </div>
-      </div>
-
-      {error && <div style={{ color: "crimson", marginTop: 8 }}>{error}</div>}
-
-      {/* Concept gallery with per-image “Refine like this” */}
-      {imgs.length > 0 && (
-        <div style={{ marginTop: 14 }}>
-          <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))" }}>
-            {imgs.map((srcImg, i) => {
-              const checked = sel.has(i);
-              return (
-                <div key={i}
-                  style={{
-                    position: "relative", border: checked ? "3px solid #0ea5e9" : "1px solid #ddd",
-                    borderRadius: 8, overflow: "hidden", background: "#fff"
-                  }}>
-                  <img src={srcImg} alt={`Option ${i+1}`} style={{ width: "100%", display: "block", cursor: "pointer" }}
-                       onClick={() => toggle(i)} />
-                  <div style={{ padding: 6, display: "flex", alignItems: "center", gap: 8, justifyContent: "space-between" }}>
-                    <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <input type="checkbox" checked={checked}
-                             onChange={() => toggle(i)} />
-                      <span style={{ fontSize: 12 }}>Use this</span>
-                    </label>
-                    <button onClick={() => refineLikeThis(i)} style={{ fontSize: 12, padding: "4px 8px" }}>
-                      Refine like this
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
+    <div className="min-h-screen bg-gray-50 dark:bg-black text-gray-900 dark:text-gray-100">
+      <header className="sticky top-0 z-10 backdrop-blur border-b border-gray-200/60 dark:border-gray-800/60 bg-white/70 dark:bg-black/60">
+        <div className="max-w-6xl mx-auto px-4 py-3 flex items-center gap-3">
+          <div className="h-8 w-8 rounded-lg bg-black dark:bg-white" />
+          <div>
+            <h1 className="text-base font-bold">Cut-List Builder</h1>
+            <p className="text-xs text-gray-500">Prompt → 3 concepts → refine → finalize → cut list + SVG</p>
+          </div>
+          <div className="ml-auto text-xs hidden sm:flex items-center gap-2">
+            <span className="px-2 py-1 rounded-md bg-gray-100 dark:bg-gray-800">Rounds kept: 5</span>
           </div>
         </div>
-      )}
+      </header>
 
-      {/* Auto joinery previews (fast) */}
-      {loadingJoin && <div style={{ marginTop: 12, fontSize: 13, color: "#555" }}>Generating joinery views…</div>}
-      {joinImgs.length > 0 && (
-        <div style={{ marginTop: 12 }}>
-          <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))" }}>
-            {joinImgs.map((im, i) => (
-              <figure key={i} style={{ margin: 0, background: "#fff", border: "1px solid #eee", borderRadius: 8, overflow: "hidden" }}>
-                <img src={im.src} alt={im.title} style={{ width: "100%", display: "block" }} />
-                <figcaption style={{ padding: 8, fontSize: 12, color: "#333" }}>{im.title}</figcaption>
-              </figure>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Cut list + SVG (when satisfied) */}
-      <div style={{ marginTop: 16, display: "flex", gap: 8, flexWrap: "wrap" }}>
-        <button onClick={genSpecFromSelection} disabled={loadingSpec || sel.size === 0} style={{ padding: "8px 14px" }}>
-          {loadingSpec ? "Cut list..." : "Use selected → Cut list + SVG"}
-        </button>
-        <button onClick={() => setSvgNonce(n => n + 1)} style={{ padding: "8px 10px" }}>
-          Refresh preview
-        </button>
-      </div>
-
-      {spec && (
-        <div style={{ marginTop: 16 }}>
-          {src && (
-            <div style={{
-              display: "inline-block", padding: "4px 8px", borderRadius: 8, fontSize: 12, fontWeight: 700,
-              background: src === "llm" ? "#e6ffed" : "#fffbe6",
-              color: src === "llm" ? "#036635" : "#8a6d00",
-              border: `1px solid ${src === "llm" ? "#7bd389" : "#ffec99"}`
-            }}>
-              {src === "llm" ? "Using OpenAI key ✅" : "Mock output ⚠️"}
-            </div>
-          )}
-          <pre style={{ background: "#f6f6f6", padding: 10, marginTop: 10, overflow: "auto" }}>
-            {JSON.stringify(spec, null, 2)}
-          </pre>
-          {showSvg && svgUrl && (
-            <>
-              <div style={{ marginTop: 8 }}>
-                <a href={svgUrl} target="_blank" rel="noreferrer" style={{ textDecoration: "underline" }}>
-                  Open SVG in new tab
-                </a>
-              </div>
-              <iframe
-                key={svgNonce}
-                src={svgUrl}
-                style={{ width: "100%", height: "70vh", border: "1px solid #ddd", borderRadius: 8, marginTop: 8 }}
-                title="Sheet layout"
+      <main className="max-w-6xl mx-auto px-4 py-6 space-y-6">
+        {/* Step 1: Prompt */}
+        <Section title="1) Describe your table" desc="Enter a base prompt and generate 3 concept images.">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="md:col-span-2">
+              <textarea
+                rows={4}
+                className="w-full rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-950 px-3 py-2 text-sm focus:ring-2 focus:ring-black dark:focus:ring-white"
+                value={basePrompt} onChange={e => setBasePrompt(e.target.value)}
+                placeholder="e.g., Shaker nightstand, 24h x 16w x 20d, maple top, plywood carcass…"
               />
-            </>
-          )}
-        </div>
-      )}
-    </main>
+              {error && <p className="text-sm text-red-600 mt-2">{error}</p>}
+            </div>
+            <div className="space-y-3">
+              <label className="block text-xs text-gray-500">Units</label>
+              <select className="w-full rounded-lg border bg-white dark:bg-gray-950 px-3 py-2 text-sm"
+                      value={units} onChange={e=>setUnits(e.target.value as any)}>
+                <option value="in">inches</option><option value="mm">millimeters</option>
+              </select>
+              <label className="block text-xs text-gray-500 mt-3">Image size</label>
+              <select className="w-full rounded-lg border bg-white dark:bg-gray-950 px-3 py-2 text-sm"
+                      value={imgSize} onChange={e=>setImgSize(e.target.value as any)}>
+                <option value="1024x1024">1024×1024</option>
+                <option value="1024x1536">1024×1536</option>
+                <option value="1536x1024">1536×1024</option>
+                <option value="auto">auto</option>
+              </select>
+            </div>
+            <div className="space-y-3">
+              <label className="block text-xs text-gray-500">Style</label>
+              <select className="w-full rounded-lg border bg-white dark:bg-gray-950 px-3 py-2 text-sm"
+                      value={style} onChange={e=>setStyle(e.target.value)}>
+                <option>Product render (clean, neutral light)</option>
+                <option>Photoreal (studio softbox, shallow DOF)</option>
+                <option>Blueprint (white lines on blue)</option>
+                <option>Pencil sketch (technical)</option>
+                <option>Craft catalog (natural light, grain emphasis)</option>
+              </select>
+              <div className="pt-4">
+                <Btn onClick={generateBase} disabled={loading!==null}>{loading==="gen" ? "Generating…" : "Generate (3)"}</Btn>
+              </div>
+            </div>
+          </div>
+        </Section>
+
+        {/* Step 2: Concepts (3 per round) with round navigator */}
+        {rounds.length > 0 && (
+          <Section title="2) Pick one concept" desc="Click a card to select. Use ◀ ▶ to review up to 5 kept rounds.">
+            <div className="mb-3 flex items-center gap-2">
+              <Btn variant="soft" onClick={prevRound} disabled={rounds.length<=1}>◀ Prev</Btn>
+              <div className="text-sm text-gray-500">Round {idx+1}/{rounds.length}{rounds[idx]?.note ? ` — ${rounds[idx]?.note}` : ""}</div>
+              <Btn variant="soft" onClick={nextRound} disabled={rounds.length<=1}>Next ▶</Btn>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {current.images.map((src, i) => {
+                const sel = current.selected === i;
+                return (
+                  <div key={i}
+                       onClick={() => selectImage(i)}
+                       className={`group relative overflow-hidden rounded-2xl border ${sel ? "border-sky-400 ring-2 ring-sky-200" : "border-gray-200 dark:border-gray-800"} bg-white dark:bg-gray-950 cursor-pointer`}>
+                    <img src={src} alt={`Option ${i+1}`} className="w-full h-64 object-cover" />
+                    <div className="absolute top-2 left-2">
+                      <span className={`px-2 py-1 rounded-md text-xs ${sel ? "bg-sky-600 text-white" : "bg-white/80 dark:bg-gray-900/80"}`}>
+                        {sel ? "Selected" : "Pick"}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </Section>
+        )}
+
+        {/* Step 3: Refine loop */}
+        {rounds.length > 0 && (
+          <Section title="3) Refine" desc="Type extra instructions and get 3 refined images. Repeat until satisfied. Keeps last 5 rounds.">
+            <div className="flex flex-col md:flex-row gap-3">
+              <input
+                className="flex-1 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-950 px-3 py-2 text-sm focus:ring-2 focus:ring-black dark:focus:ring-white"
+                value={refineText} onChange={e=>setRefineText(e.target.value)}
+                placeholder="e.g., taper legs, walnut, beveled top, lowered apron…"
+              />
+              <Btn variant="ghost" onClick={refineRound} disabled={loading!==null || current.selected===null}>
+                {loading==="refine" ? "Refining…" : "Refine (3)"}
+              </Btn>
+            </div>
+          </Section>
+        )}
+
+        {/* Step 4: Quick joinery previews for the selected concept */}
+        {current.selected !== null && (
+          <Section title="4) Joinery previews" desc="Fast, illustrative views (exploded / joint detail).">
+            {loadingJoin && <div className="text-sm text-gray-500">Generating joinery views…</div>}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {joinImgs.map((im, i) => (
+                <Card key={i} className="overflow-hidden">
+                  <img src={im.src} alt={im.title} className="w-full h-64 object-cover" />
+                  <div className="p-3 text-sm text-gray-600 dark:text-gray-300">{im.title}</div>
+                </Card>
+              ))}
+              {!joinImgs.length && !loadingJoin && <div className="text-sm text-gray-500">Select a concept above to see joinery previews.</div>}
+            </div>
+          </Section>
+        )}
+
+        {/* Step 5: Cut list + SVG */}
+        {rounds.length > 0 && (
+          <Section title="5) Finalize" desc="Generate a cut list from the selected concept and preview the SVG layout.">
+            <div className="flex items-center gap-2">
+              <Btn onClick={generateCutList} disabled={loading!==null || current.selected===null}>
+                {loading==="cutlist" ? "Generating cut list…" : "Use selected → Cut list + SVG"}
+              </Btn>
+              <Btn variant="soft" onClick={()=>setSvgNonce(n=>n+1)}>Refresh preview</Btn>
+            </div>
+
+            {spec && (
+              <div className="mt-4 grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <Card className="p-4 overflow-auto">
+                  <div className="mb-2 text-sm">
+                    {srcFlag && (
+                      <span className={`inline-flex items-center gap-2 px-2 py-1 rounded-md border ${srcFlag==="llm" ? "bg-emerald-50 border-emerald-200 text-emerald-700" : "bg-amber-50 border-amber-200 text-amber-700"}`}>
+                        {srcFlag==="llm" ? "Using OpenAI key" : "Mock output"}
+                      </span>
+                    )}
+                  </div>
+                  <pre className="text-xs leading-5">{JSON.stringify(spec, null, 2)}</pre>
+                </Card>
+                <Card className="overflow-hidden">
+                  {showSvg && svgUrl ? (
+                    <iframe key={svgNonce} src={svgUrl} className="w-full h-[70vh] border-0" title="Sheet layout" />
+                  ) : (
+                    <div className="p-6 text-sm text-gray-500">Click “Use selected → Cut list + SVG”.</div>
+                  )}
+                </Card>
+              </div>
+            )}
+          </Section>
+        )}
+      </main>
+    </div>
   );
 }
