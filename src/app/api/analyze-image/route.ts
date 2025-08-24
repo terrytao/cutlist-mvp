@@ -44,7 +44,7 @@ export async function POST(req: Request) {
           role: "user",
           content: [
             { type: "input_text", text: `Analyze this furniture photo. Units: ${units}. Return concise descriptors for woodworking rendering.` },
-            { type: "input_image", image_url: imageDataUrl }
+            { type: "input_image", image_url: imageDataUrl , detail: "low"}
           ]
         }
       ],

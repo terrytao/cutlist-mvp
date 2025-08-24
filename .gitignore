@@ -54,3 +54,9 @@ yarn-error.log*
 
 # local backups from earlier steps
 backups/
+
+# --- cutlist-mvp ---
+.env.local
+.next
+node_modules
+backups/

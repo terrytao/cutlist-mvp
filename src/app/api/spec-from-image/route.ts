@@ -115,7 +115,7 @@ export async function POST(req: Request) {
            Always include "concept" with archetype + overall W/D/H + leg_type + apron_height_class + shelf.` },
         { role: "user", content: [
           { type: "input_text", text: `Units=${units}. ${prompt}` },
-          { type: "input_image", image_url: imageDataUrl }
+          { type: "input_image", image_url: imageDataUrl , detail: "low"}
         ] }
       ],
       temperature: 0
