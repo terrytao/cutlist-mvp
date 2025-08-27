@@ -2,11 +2,12 @@ import OpenAI from "openai";
 import { SpecSchema, type Spec } from "../../../lib/schema";
 import { applyKerfToList, applyEdgeBandingToList, applyDadoOffsets } from "../../../lib/allowances";
 import { computeJoinery } from "../../../lib/compute";
+import { consumeTrial } from "@/lib/trial";
 
 export const runtime = "nodejs";
 let client: OpenAI | null = null;
 
-/** Strict JSON Schema for structured outputs (includes concept; joinery is strict) */
+/** Strict JSON Schema (unchanged) */
 const SpecJsonSchema = {
   type: "object",
   additionalProperties: false,
@@ -15,23 +16,17 @@ const SpecJsonSchema = {
     project: { type: "string" },
     units: { type: "string", enum: ["in","mm"] },
     tolerances: {
-      type: "object",
-      additionalProperties: false,
-      required: ["kerf"],
-      properties: { kerf: { type: "number", minimum: 0 } }
+      type: "object", additionalProperties: false,
+      required: ["kerf"], properties: { kerf: { type: "number", minimum: 0 } }
     },
     cut_list: {
       type: "array",
       items: {
-        type: "object",
-        additionalProperties: false,
+        type: "object", additionalProperties: false,
         required: ["part","qty","material","thickness","length","width","grain"],
         properties: {
-          part: { type: "string" },
-          qty: { type: "integer", minimum: 1 },
-          material: { type: "string" },
-          thickness: { type: "number", exclusiveMinimum: 0 },
-          length: { type: "number", exclusiveMinimum: 0 },
+          part: { type: "string" }, qty: { type: "integer", minimum: 1 }, material: { type: "string" },
+          thickness: { type: "number", exclusiveMinimum: 0 }, length: { type: "number", exclusiveMinimum: 0 },
           width:  { type: "number", exclusiveMinimum: 0 },
           grain:  { anyOf: [ { type: "string", enum: ["length","width"] }, { type: "null" } ] }
         }
@@ -41,8 +36,7 @@ const SpecJsonSchema = {
     edge_banding: {
       type: "array",
       items: {
-        type: "object",
-        additionalProperties: false,
+        type: "object", additionalProperties: false,
         required: ["part","sides","overhang"],
         properties: {
           part: { type: "string" },
@@ -51,12 +45,10 @@ const SpecJsonSchema = {
         }
       }
     },
-    /** STRICT joinery item (we override values later, but model must validate) */
     joinery: {
       type: "array",
       items: {
-        type: "object",
-        additionalProperties: false,
+        type: "object", additionalProperties: false,
         required: ["type","depth","at_parts"],
         properties: {
           type: { type: "string" },
@@ -65,26 +57,16 @@ const SpecJsonSchema = {
         }
       }
     },
-    /** High-level design concept used for deterministic joinery */
     concept: {
-      type: "object",
-      additionalProperties: false,
+      type: "object", additionalProperties: false,
       required: ["archetype","overall","leg_type","apron_height_class","shelf"],
       properties: {
         archetype: { type: "string", enum: ["leg_apron_stretcher","panel_carcass"] },
-        overall: {
-          type: "object",
-          additionalProperties: false,
-          required: ["W","D","H"],
-          properties: {
-            W: { type: "number", minimum: 0 },
-            D: { type: "number", minimum: 0 },
-            H: { type: "number", minimum: 0 }
-          }
-        },
-        leg_type: { anyOf: [ { type: "string", enum: ["square","tapered","turned"] }, { type: "null" } ] },
-        apron_height_class: { anyOf: [ { type: "string", enum: ["short","medium","tall"] }, { type: "null" } ] },
-        shelf: { anyOf: [ { type: "boolean" }, { type: "null" } ] }
+        overall: { type: "object", additionalProperties: false, required: ["W","D","H"],
+          properties: { W:{type:"number",minimum:0}, D:{type:"number",minimum:0}, H:{type:"number",minimum:0} } },
+        leg_type: { anyOf: [ { type:"string", enum:["square","tapered","turned"] }, { type:"null" } ] },
+        apron_height_class: { anyOf: [ { type:"string", enum:["short","medium","tall"] }, { type:"null" } ] },
+        shelf: { anyOf: [ { type:"boolean" }, { type:"null" } ] }
       }
     }
   }
@@ -100,34 +82,34 @@ export async function POST(req: Request) {
     if (!process.env.OPENAI_API_KEY?.trim()) {
       return new Response(JSON.stringify({ error: "OPENAI_API_KEY missing" }), { status: 400 });
     }
-    if (!client) client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
 
+    // Trial: ~2 cents for spec generation
+    const pre = await consumeTrial(req, 2);
+    if (!pre.allowed) {
+      return new Response(JSON.stringify({ error: "Free preview limit reached. Please sign in or purchase export to continue.", code: "TRIAL_CAP", remainingCents: pre.remainingCents }), { status: 402 });
+    }
+
+    if (!client) client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
     const resp = await client.responses.create({
       model: "gpt-4o-mini",
-      text: {
-        format: { type: "json_schema", name: "Spec", strict: true, schema: SpecJsonSchema }
-      },
+      text: { format: { type: "json_schema", name: "Spec", strict: true, schema: SpecJsonSchema } },
       input: [
         { role: "system", content:
           `You are a woodworking estimator. Return ONLY JSON matching the schema.
-           Use canonical names when possible: "Leg", "Apron - Front/Back/Left/Right", optional "Stretcher - Front/Back/Left/Right",
+           Use canonical names: "Leg", "Apron - Front/Back/Left/Right", optional "Stretcher - Front/Back/Left/Right",
            "Shelf", "Side Panel", "Back Panel", "Bottom", "Top" or "Solid Top".
            Always include "concept" with archetype + overall W/D/H + leg_type + apron_height_class + shelf.` },
         { role: "user", content: [
           { type: "input_text", text: `Units=${units}. ${prompt}` },
-          { type: "input_image", image_url: imageDataUrl , detail: "low"}
+          { type: "input_image", image_url: imageDataUrl, detail: "low" }
         ] }
       ],
       temperature: 0
     });
 
-    // Parse & validate model output
     const raw: Spec = SpecSchema.parse(JSON.parse(resp.output_text));
-
-    // Deterministic joinery: override any model-provided joinery with our rules
     const withJoinery = computeJoinery(raw);
 
-    // Allowances: edge-banding -> dado offsets -> kerf
     const ebDefault = withJoinery.units === "mm" ? 1 : 1/16;
     const kerf = Number.isFinite(withJoinery.tolerances?.kerf)
       ? (withJoinery.tolerances!.kerf as number)

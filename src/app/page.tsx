@@ -1,52 +1,15 @@
 "use client";
 import { useMemo, useRef, useState, useEffect } from "react";
 
-/* ---------- Types ---------- */
+/* Types */
 type GenResp = { images: string[]; usedPrompt?: string };
 type SpecResp = { source: "llm" | "mock"; spec: any; usage?: any; error?: string };
 type JoinImg = { title: string; src: string };
 type JoinResp = { images: JoinImg[]; error?: string };
 type Round = { images: string[]; selected: number | null; note?: string };
-type SessionState = {
-  basePrompt: string;
-  refineText: string;
-  rounds: Round[];
-  idx: number;
-  style: string;
-  imgSize: "1024x1024"|"1024x1536"|"1536x1024"|"auto";
-  units: "in"|"mm";
-};
+type TrialStatus = { clientId: string; usedCents: number; capCents: number; remainingCents: number; ttlSec: number | null };
 
-/* ---------- IndexedDB helpers (simple key/value) ---------- */
-const DB_NAME = "cutlist-db";
-const STORE = "session";
-const KEY = "session-v1";
-function idbOpen(): Promise<IDBDatabase> {
-  return new Promise((res, rej) => {
-    const req = indexedDB.open(DB_NAME, 1);
-    req.onupgradeneeded = () => { const db = req.result; if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE); };
-    req.onsuccess = () => res(req.result);
-    req.onerror = () => rej(req.error);
-  });
-}
-function idbSet(key: string, val: any): Promise<void> {
-  return idbOpen().then(db => new Promise((res, rej) => {
-    const tx = db.transaction(STORE, "readwrite"); const st = tx.objectStore(STORE);
-    const req = st.put(val, key);
-    req.onsuccess = () => res(tx.oncomplete as any);
-    req.onerror = () => rej(req.error);
-  }));
-}
-function idbGet<T=any>(key: string): Promise<T|null> {
-  return idbOpen().then(db => new Promise((res, rej) => {
-    const tx = db.transaction(STORE, "readonly"); const st = tx.objectStore(STORE);
-    const req = st.get(key);
-    req.onsuccess = () => res((req.result ?? null) as T|null);
-    req.onerror = () => rej(req.error);
-  }));
-}
-
-/* ---------- Little UI helpers ---------- */
+/* UI helpers */
 function Btn(props: React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: "primary"|"ghost"|"soft" }) {
   const { variant="primary", className="", ...rest } = props;
   const base = "inline-flex items-center justify-center rounded-lg text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none";
@@ -72,9 +35,9 @@ function Section({title,desc,children}:{title:string;desc?:string;children:any})
   );
 }
 
-/* ---------- Page ---------- */
+/* Page */
 export default function Home() {
-  /* Flow state */
+  // Flow
   const [basePrompt, setBasePrompt] = useState('Square end table, Shaker/Arts&Crafts style. 24"W x 24"D x 16"H. Mortise & tenon.');
   const [refineText, setRefineText] = useState("");
   const [rounds, setRounds] = useState<Round[]>([]);
@@ -84,12 +47,16 @@ export default function Home() {
   const [units, setUnits] = useState<"in"|"mm">("in");
   const current = rounds[idx] || { images: [], selected: null };
 
-  /* Busy & error */
+  // Busy & error
   const [loading, setLoading] = useState<null | "gen" | "refine" | "cutlist">(null);
   const [error, setError] = useState<string | null>(null);
-  const [banner, setBanner] = useState<string | null>(null); // shows "Restored autosave" etc.
 
-  /* Spec/SVG */
+  // Joinery previews
+  const [joinImgs, setJoinImgs] = useState<JoinImg[]>([]);
+  const [loadingJoin, setLoadingJoin] = useState(false);
+  const autoJoinReq = useRef(0);
+
+  // Spec/SVG
   const [spec, setSpec] = useState<any>(null);
   const [srcFlag, setSrcFlag] = useState<string | null>(null);
   const [showSvg, setShowSvg] = useState(false);
@@ -100,151 +67,34 @@ export default function Home() {
     return `/api/export/svg?spec=${encoded}&w=1200&joins=1&labelbg=1&fsmin=9&fsmax=12&t=${svgNonce}`;
   }, [spec, showSvg, svgNonce]);
 
-  /* Joinery previews — ACCURATE & DE-RACED */
-  const [joinImgs, setJoinImgs] = useState<JoinImg[]>([]);
-  const [loadingJoin, setLoadingJoin] = useState(false);
-  const autoJoinReq = useRef(0);
-  useEffect(() => {
-    if (!current.images.length || current.selected === null) { setJoinImgs([]); return; }
-    setJoinImgs([]); // clear old preview immediately
-    const reqId = ++autoJoinReq.current;
-    const chosenImg = current.images[current.selected];
+  // Trial badge + entitlement
+  const [trial, setTrial] = useState<TrialStatus | null>(null);
+  const [entitled, setEntitled] = useState(false);
 
-    const acAnalyze = new AbortController();
-    const acSpec    = new AbortController();
-    const acJoin    = new AbortController();
+  const refreshTrial = async () => {
+    try {
+      const r = await fetch("/api/trial/status", { cache: "no-store" });
+      if (r.ok) setTrial(await r.json());
+    } catch {}
+  };
+  const refreshEntitled = async () => {
+    try {
+      const r = await fetch("/api/export/status", { cache: "no-store" });
+      if (r.ok) { const j = await r.json(); setEntitled(Boolean(j.entitled)); }
+    } catch {}
+  };
 
-    const run = async () => {
-      try {
-        setLoadingJoin(true); setError(null);
-
-        // Analyze style (best-effort)
-        let styleRef = "";
-        try {
-          const ares = await fetch("/api/analyze-image", {
-            method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ imageDataUrl: chosenImg, units, nonce: Date.now() }),
-            cache: "no-store", signal: acAnalyze.signal
-          });
-          const adat = await ares.json();
-          if (reqId !== autoJoinReq.current) return;
-          if (ares.ok && adat?.style) {
-            const s = adat.style;
-            styleRef = `Match visual style: leg ${s.leg_shape}; apron ${s.apron_height}; edge ${s.top_edge}; wood ${s.wood}; tone ${s.color_tone}; ${s.keywords}.`;
-          }
-        } catch (e:any) { if (e?.name !== "AbortError") {/* ignore */} }
-
-        // Spec from THIS exact image
-        const sres = await fetch("/api/spec-from-image", {
-          method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ prompt: basePrompt, units, imageDataUrl: chosenImg, nonce: Date.now() }),
-          cache: "no-store", signal: acSpec.signal
-        });
-        const sdat: SpecResp = await sres.json();
-        if (reqId !== autoJoinReq.current) return;
-        if (!sres.ok) throw new Error((sdat as any)?.error || "Spec generation failed (joinery)");
-
-        // Joinery pics from that spec + style cues
-        const jres = await fetch("/api/joinery-images", {
-          method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ spec: sdat.spec, count: 2, size: "1024x1024", style: styleRef, nonce: Date.now() }),
-          cache: "no-store", signal: acJoin.signal
-        });
-        const jdat: JoinResp = await jres.json();
-        if (reqId !== autoJoinReq.current) return;
-        if (!jres.ok) throw new Error(jdat?.error || "Joinery generation failed");
-
-        setJoinImgs(jdat.images || []);
-      } catch (e:any) {
-        if (e?.name !== "AbortError") setError(e?.message || "Joinery preview failed");
-      } finally {
-        if (reqId === autoJoinReq.current) setLoadingJoin(false);
+  useEffect(() => { refreshTrial(); refreshEntitled();
+    // if returning from Stripe success
+    if (typeof window !== "undefined") {
+      const u = new URL(window.location.href);
+      if (u.searchParams.get("paid") === "1") {
+        setTimeout(refreshEntitled, 1500);
       }
-    };
-
-    const timer = setTimeout(run, 300);
-    return () => { clearTimeout(timer); acAnalyze.abort(); acSpec.abort(); acJoin.abort(); };
-  }, [idx, current.selected, current.images, basePrompt, units]);
-
-  /* -------- AUTOSAVE: load on mount, save on changes -------- */
-  useEffect(() => {
-    (async () => {
-      try {
-        const saved = await idbGet<SessionState>(KEY);
-        if (saved && saved.rounds?.length) {
-          setBasePrompt(saved.basePrompt);
-          setRefineText(saved.refineText);
-          setRounds(saved.rounds);
-          setIdx(Math.min(saved.idx ?? 0, Math.max(0, saved.rounds.length - 1)));
-          setStyle(saved.style);
-          setImgSize(saved.imgSize);
-          setUnits(saved.units);
-          setBanner("Restored autosave");
-          setTimeout(()=>setBanner(null), 2000);
-        }
-      } catch {/* ignore */}
-    })();
+    }
   }, []);
 
-  // debounce save
-  const saveTimer = useRef<any>(null);
-  function scheduleSave() {
-    const snap: SessionState = { basePrompt, refineText, rounds, idx, style, imgSize, units };
-    if (saveTimer.current) clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(async () => {
-      try { await idbSet(KEY, snap); } catch {/* ignore */}
-    }, 300);
-  }
-  useEffect(() => { scheduleSave(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [basePrompt, refineText, rounds, idx, style, imgSize, units]);
-
-  /* Manual save/load/export/import */
-  async function saveNow() {
-    try { await idbSet(KEY, { basePrompt, refineText, rounds, idx, style, imgSize, units }); setBanner("Saved"); setTimeout(()=>setBanner(null), 1500); } catch(e:any){ setError(e.message); }
-  }
-  async function loadAutosave() {
-    try {
-      const saved = await idbGet<SessionState>(KEY);
-      if (saved && saved.rounds?.length) {
-        setBasePrompt(saved.basePrompt);
-        setRefineText(saved.refineText);
-        setRounds(saved.rounds);
-        setIdx(Math.min(saved.idx ?? 0, Math.max(0, saved.rounds.length - 1)));
-        setStyle(saved.style);
-        setImgSize(saved.imgSize);
-        setUnits(saved.units);
-        setBanner("Loaded autosave");
-        setTimeout(()=>setBanner(null), 1500);
-      } else setBanner("No autosave found");
-    } catch(e:any){ setError(e.message); }
-  }
-  function exportJson() {
-    const data: SessionState = { basePrompt, refineText, rounds, idx, style, imgSize, units };
-    const blob = new Blob([JSON.stringify(data)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a"); a.href = url; a.download = "cutlist-session.json"; a.click();
-    URL.revokeObjectURL(url);
-  }
-  function importJson(file: File) {
-    const fr = new FileReader();
-    fr.onload = () => {
-      try {
-        const s = JSON.parse(String(fr.result)) as SessionState;
-        if (!s || !Array.isArray(s.rounds)) throw new Error("Invalid file");
-        setBasePrompt(s.basePrompt ?? basePrompt);
-        setRefineText(s.refineText ?? "");
-        setRounds(s.rounds ?? []);
-        setIdx(Math.min(s.idx ?? 0, Math.max(0, (s.rounds ?? []).length - 1)));
-        setStyle(s.style ?? style);
-        setImgSize((s.imgSize as any) ?? imgSize);
-        setUnits((s.units as any) ?? units);
-        setBanner("Imported session");
-        setTimeout(()=>setBanner(null), 1500);
-      } catch (e:any) { setError(e.message || "Import failed"); }
-    };
-    fr.readAsText(file);
-  }
-
-  /* API helpers */
+  // API helpers
   async function callImagesApi(body: any): Promise<GenResp> {
     const res = await fetch("/api/images", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     const data = await res.json();
@@ -253,62 +103,101 @@ export default function Home() {
   }
 
   async function generateBase() {
-    try {
-      setError(null); setLoading("gen"); setSpec(null); setShowSvg(false);
+    try { setError(null); setLoading("gen"); setSpec(null); setShowSvg(false);
       const data = await callImagesApi({ prompt: basePrompt, count: 3, size: imgSize, style });
-      setRounds([{ images: data.images, selected: null, note: "base" }]);
-      setIdx(0);
+      setRounds([{ images: data.images, selected: null, note: "base" }]); setIdx(0);
     } catch (e:any) { setError(e.message); }
-    finally { setLoading(null); }
+    finally { setLoading(null); refreshTrial(); }
   }
 
   async function refineRound() {
     if (!rounds.length) { setError("Generate pictures first."); return; }
     const cur = rounds[idx] || { images: [], selected: null };
     if (cur.selected === null) { setError("Pick one picture to refine from."); return; }
-    try {
-      setError(null); setLoading("refine"); setSpec(null); setShowSvg(false);
+    try { setError(null); setLoading("refine"); setSpec(null); setShowSvg(false);
       const fullPrompt = `${basePrompt}. Reference the chosen concept (materials/proportions) and apply: ${refineText}.`;
       const data = await callImagesApi({ prompt: fullPrompt, count: 3, size: imgSize, style });
       const next: Round = { images: data.images, selected: null, note: refineText || "(refine)" };
-      setRounds(prev => {
-        const arr = [...prev, next];
-        return arr.length > 5 ? arr.slice(arr.length - 5) : arr;
-      });
-      setIdx(i => Math.min(i + 1, 4));
-      setRefineText("");
+      setRounds(prev => { const arr = [...prev, next]; return arr.length > 5 ? arr.slice(arr.length - 5) : arr; });
+      setIdx(i => Math.min(i + 1, 4)); setRefineText("");
     } catch (e:any) { setError(e.message); }
-    finally { setLoading(null); }
+    finally { setLoading(null); refreshTrial(); }
   }
-
-  function selectImage(i:number) {
-    if (!rounds.length) return;
-    const copy = rounds.slice();
-    copy[idx] = { ...copy[idx], selected: i };
-    setRounds(copy);
-  }
-  function prevRound(){ if (rounds.length>1) setIdx(i => (i - 1 + rounds.length) % rounds.length); }
-  function nextRound(){ if (rounds.length>1) setIdx(i => (i + 1) % rounds.length); }
 
   async function generateCutList() {
     const cur = rounds[idx] || { images: [], selected: null };
     if (!rounds.length || cur.selected === null) { setError("Pick a final picture first."); return; }
-    try {
-      setError(null); setLoading("cutlist");
+    try { setError(null); setLoading("cutlist");
       const chosen = cur.images[cur.selected];
-      const res = await fetch("/api/spec-from-image", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: basePrompt, units, imageDataUrl: chosen })
-      });
+      const res = await fetch("/api/spec-from-image", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: basePrompt, units, imageDataUrl: chosen }) });
       const data: SpecResp = await res.json();
       if (!res.ok) throw new Error((data as any)?.error || "Spec generation failed");
-      setSpec(data.spec); setSrcFlag(data.source || null);
-      setShowSvg(true); setSvgNonce(n => n + 1);
+      setSpec(data.spec); setSrcFlag(data.source || null); setShowSvg(true); setSvgNonce(n => n + 1);
     } catch (e:any) { setError(e.message); }
-    finally { setLoading(null); }
+    finally { setLoading(null); refreshTrial(); }
   }
 
-  /* ---------- UI ---------- */
+  // Accurate joinery previews tied to selected image
+  useEffect(() => {
+    if (!current.images.length || current.selected === null) { setJoinImgs([]); return; }
+    setJoinImgs([]); const reqId = (autoJoinReq.current += 1);
+    const chosenImg = current.images[current.selected];
+    const acA = new AbortController(), acS = new AbortController(), acJ = new AbortController();
+
+    const run = async () => {
+      try {
+        setLoadingJoin(true); setError(null);
+        // analyze style (best effort)
+        let styleRef = "";
+        try {
+          const r = await fetch("/api/analyze-image", { method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ imageDataUrl: chosenImg, units, nonce: Date.now() }), cache: "no-store", signal: acA.signal });
+          const j = await r.json(); if (reqId !== autoJoinReq.current) return;
+          if (r.ok && j?.style) { const s = j.style;
+            styleRef = `Match visual style: leg ${s.leg_shape}; apron ${s.apron_height}; edge ${s.top_edge}; wood ${s.wood}; tone ${s.color_tone}; ${s.keywords}.`; }
+        } catch {}
+        // spec
+        const sRes = await fetch("/api/spec-from-image", { method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ prompt: basePrompt, units, imageDataUrl: chosenImg, nonce: Date.now() }), cache: "no-store", signal: acS.signal });
+        const sDat: SpecResp = await sRes.json(); if (reqId !== autoJoinReq.current) return;
+        if (!sRes.ok) throw new Error((sDat as any)?.error || "Spec generation failed (joinery)");
+        // images
+        const jRes = await fetch("/api/joinery-images", { method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ spec: sDat.spec, count: 2, size: "1024x1024", style: styleRef, nonce: Date.now() }), cache: "no-store", signal: acJ.signal });
+        const jDat: JoinResp = await jRes.json(); if (reqId !== autoJoinReq.current) return;
+        if (!jRes.ok) throw new Error(jDat?.error || "Joinery generation failed");
+        setJoinImgs(jDat.images || []);
+      } catch (e:any) { if (e?.name !== "AbortError") setError(e?.message || "Joinery preview failed"); }
+      finally { if (reqId === autoJoinReq.current) { setLoadingJoin(false); refreshTrial(); } }
+    };
+    const timer = setTimeout(run, 300);
+    return () => { clearTimeout(timer); acA.abort(); acS.abort(); acJ.abort(); };
+  }, [idx, current.selected, current.images, basePrompt, units]);
+
+  // Stripe: start Checkout with current clientId
+  async function buyExport() {
+    try {
+      const ts = await fetch("/api/trial/status", { cache: "no-store" }).then(r => r.json() as Promise<TrialStatus>);
+      const res = await fetch("/api/pay/checkout", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clientId: ts.clientId, returnUrl: window.location.origin })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "checkout failed");
+      window.location.href = data.url;
+    } catch (e: any) {
+      setError(e.message);
+    }
+  }
+
+  // UI badge
+  const remainingDollars = trial ? (trial.remainingCents / 100).toFixed(2) : null;
+  const capDollars = trial ? (trial.capCents / 100).toFixed(2) : null;
+  const badgeClass = trial && trial.remainingCents > 0
+    ? "bg-emerald-50 border-emerald-200 text-emerald-700"
+    : "bg-amber-50 border-amber-200 text-amber-700";
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-black text-gray-900 dark:text-gray-100">
       <header className="sticky top-0 z-10 backdrop-blur border-b border-gray-200/60 dark:border-gray-800/60 bg-white/70 dark:bg-black/60">
@@ -319,16 +208,13 @@ export default function Home() {
             <p className="text-xs text-gray-500">Prompt → 3 concepts → refine → finalize → cut list + SVG</p>
           </div>
           <div className="ml-auto flex items-center gap-2">
-            <Btn variant="soft" onClick={saveNow}>Save now</Btn>
-            <Btn variant="soft" onClick={loadAutosave}>Load autosave</Btn>
-            <Btn variant="soft" onClick={exportJson}>Export .json</Btn>
-            <label className="inline-flex items-center cursor-pointer">
-              <input type="file" accept="application/json" className="hidden" onChange={(e)=>{ const f=e.target.files?.[0]; if (f) importJson(f); }} />
-              <span className="px-3 py-2 rounded-lg border border-gray-300 text-sm hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800">Import .json</span>
-            </label>
+            <span className={`inline-flex items-center gap-2 px-2 py-1 rounded-md border text-xs ${badgeClass}`} title="We cover a small preview budget so you can try. Final export is paid.">
+              <span className="hidden sm:inline">Free preview left:</span>
+              <span>${remainingDollars ?? "—"} / ${capDollars ?? "—"}</span>
+              <button onClick={refreshTrial} className="underline decoration-dotted text-xs">refresh</button>
+            </span>
           </div>
         </div>
-        {banner && <div className="text-center text-xs text-gray-600 dark:text-gray-300 py-1">{banner}</div>}
       </header>
 
       <main className="max-w-6xl mx-auto px-4 py-6 space-y-6">
@@ -337,19 +223,18 @@ export default function Home() {
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div className="md:col-span-2">
               <textarea rows={4} className="w-full rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-950 px-3 py-2 text-sm focus:ring-2 focus:ring-black dark:focus:ring-white"
-                value={basePrompt} onChange={e => setBasePrompt(e.target.value)}
-                placeholder="e.g., Shaker nightstand, 24h x 16w x 20d, maple top, plywood carcass…" />
+                value={basePrompt} onChange={e => setBasePrompt(e.target.value)} />
               {error && <p className="text-sm text-red-600 mt-2">{error}</p>}
             </div>
             <div className="space-y-3">
               <label className="block text-xs text-gray-500">Units</label>
               <select className="w-full rounded-lg border bg-white dark:bg-gray-950 px-3 py-2 text-sm"
-                      value={units} onChange={e=>setUnits(e.target.value as any)}>
+                value={units} onChange={e=>setUnits(e.target.value as any)}>
                 <option value="in">inches</option><option value="mm">millimeters</option>
               </select>
               <label className="block text-xs text-gray-500 mt-3">Image size</label>
               <select className="w-full rounded-lg border bg-white dark:bg-gray-950 px-3 py-2 text-sm"
-                      value={imgSize} onChange={e=>setImgSize(e.target.value as any)}>
+                value={imgSize} onChange={e=>setImgSize(e.target.value as any)}>
                 <option value="1024x1024">1024×1024</option>
                 <option value="1024x1536">1024×1536</option>
                 <option value="1536x1024">1536×1024</option>
@@ -359,7 +244,7 @@ export default function Home() {
             <div className="space-y-3">
               <label className="block text-xs text-gray-500">Style</label>
               <select className="w-full rounded-lg border bg-white dark:bg-gray-950 px-3 py-2 text-sm"
-                      value={style} onChange={e=>setStyle(e.target.value)}>
+                value={style} onChange={e=>setStyle(e.target.value)}>
                 <option>Product render (clean, neutral light)</option>
                 <option>Photoreal (studio softbox, shallow DOF)</option>
                 <option>Blueprint (white lines on blue)</option>
@@ -406,8 +291,7 @@ export default function Home() {
           <Section title="3) Refine" desc="Type extra instructions and get 3 refined images. Repeat; keeps last 5 rounds.">
             <div className="flex flex-col md:flex-row gap-3">
               <input className="flex-1 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-950 px-3 py-2 text-sm focus:ring-2 focus:ring-black dark:focus:ring-white"
-                value={refineText} onChange={e=>setRefineText(e.target.value)}
-                placeholder="e.g., taper legs, walnut, beveled top, lowered apron…" />
+                value={refineText} onChange={e=>setRefineText(e.target.value)} placeholder="e.g., taper legs, walnut, beveled top, lowered apron…" />
               <Btn variant="ghost" onClick={refineRound} disabled={loading!==null || current.selected===null}>
                 {loading==="refine" ? "Refining…" : "Refine (3)"}
               </Btn>
@@ -433,11 +317,20 @@ export default function Home() {
 
         {/* Step 5 */}
         {rounds.length > 0 && (
-          <Section title="5) Finalize" desc="Generate a cut list from the selected concept and preview the SVG layout.">
-            <div className="flex items-center gap-2">
+          <Section title="5) Finalize" desc="Generate a cut list from the selected concept, then pay to download your SVG/G-code.">
+            <div className="flex items-center gap-2 flex-wrap">
               <Btn onClick={generateCutList} disabled={loading!==null || current.selected===null}>
                 {loading==="cutlist" ? "Generating cut list…" : "Use selected → Cut list + SVG"}
               </Btn>
+              {!entitled ? (
+                <Btn variant="ghost" onClick={buyExport} title="Pay once to unlock downloads for this browser.">$6.99 — Buy export</Btn>
+              ) : (
+                <Btn variant="soft" onClick={() => {
+                  if (!spec) return;
+                  const encoded = encodeURIComponent(JSON.stringify(spec));
+                  window.open(`/api/export/download?spec=${encoded}`, "_blank");
+                }}>Download SVG</Btn>
+              )}
               <Btn variant="soft" onClick={()=>setSvgNonce(n=>n+1)}>Refresh preview</Btn>
             </div>
 
@@ -445,16 +338,14 @@ export default function Home() {
               <div className="mt-4 grid grid-cols-1 lg:grid-cols-2 gap-4">
                 <Card className="p-4 overflow-auto">
                   <div className="mb-2 text-sm">
-                    {srcFlag && (
-                      <span className={`inline-flex items-center gap-2 px-2 py-1 rounded-md border ${srcFlag==="llm" ? "bg-emerald-50 border-emerald-200 text-emerald-700" : "bg-amber-50 border-amber-200 text-amber-700"}`}>
-                        {srcFlag==="llm" ? "Using OpenAI key" : "Mock output"}
-                      </span>
-                    )}
+                    {entitled
+                      ? <span className="inline-flex items-center gap-2 px-2 py-1 rounded-md border bg-emerald-50 border-emerald-200 text-emerald-700">Export unlocked</span>
+                      : <span className="inline-flex items-center gap-2 px-2 py-1 rounded-md border bg-amber-50 border-amber-200 text-amber-700">Preview only</span>}
                   </div>
                   <pre className="text-xs leading-5">{JSON.stringify(spec, null, 2)}</pre>
                 </Card>
                 <Card className="overflow-hidden">
-                  {showSvg && svgUrl ? (
+                  {svgUrl ? (
                     <iframe key={svgNonce} src={svgUrl} className="w-full h-[70vh] border-0" title="Sheet layout" />
                   ) : (
                     <div className="p-6 text-sm text-gray-500">Click “Use selected → Cut list + SVG”.</div>
