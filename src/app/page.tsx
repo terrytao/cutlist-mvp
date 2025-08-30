@@ -345,12 +345,32 @@ export default function Home() {
                   <pre className="text-xs leading-5">{JSON.stringify(spec, null, 2)}</pre>
                 </Card>
                 <Card className="overflow-hidden">
-                  {svgUrl ? (
-                    <iframe key={svgNonce} src={svgUrl} className="w-full h-[70vh] border-0" title="Sheet layout" />
-                  ) : (
-                    <div className="p-6 text-sm text-gray-500">Click “Use selected → Cut list + SVG”.</div>
-                  )}
-                </Card>
+  {showSvg && svgUrl ? (
+    <div>
+      <iframe
+        key={svgNonce}
+        src={svgUrl}
+        className="w-full h-[70vh] border-0"
+        title="Sheet layout"
+      />
+      <div className="mt-2">
+        {spec && (
+          <a
+            href={`/api/export/joint/plate?spec=${encodeURIComponent(JSON.stringify(spec))}&host=Leg&insert=Apron%20-%20Front&w=1000`}
+            target="_blank"
+            rel="noreferrer"
+            className="underline text-sm"
+            title="Open a detailed mortise plate (dimensioned) for Leg ⟷ Apron - Front"
+          >
+            Open mortise plate (Leg ⟷ Apron - Front)
+          </a>
+        )}
+      </div>
+    </div>
+  ) : (
+    <div className="p-6 text-sm text-gray-500">Click "Use selected → Cut list + SVG".</div>
+  )}
+</Card>
               </div>
             )}
           </Section>
