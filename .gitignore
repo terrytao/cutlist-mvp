@@ -60,3 +60,9 @@ backups/
 .next
 node_modules
 backups/
+
+# --- cutlist-mvp ---
+.env.local
+.next
+node_modules
+backups/

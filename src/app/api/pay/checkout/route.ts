@@ -3,14 +3,19 @@ import { NextRequest } from "next/server";
 
 export const runtime = "nodejs";
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "", { apiVersion: "2024-06-20" });
+let stripeClient: Stripe | null = null;
+function getStripe(): Stripe {
+  const key = process.env.STRIPE_SECRET_KEY;
+  if (!key) throw new Error("STRIPE_SECRET_KEY missing");
+  if (!stripeClient) stripeClient = new Stripe(key);
+  return stripeClient;
+}
 
 export async function POST(req: NextRequest) {
   try {
     const { clientId, returnUrl } = await req.json();
-    if (!process.env.STRIPE_SECRET_KEY) {
-      return new Response(JSON.stringify({ error: "STRIPE_SECRET_KEY missing" }), { status: 400 });
-    }
+    const stripe = getStripe();
+
     if (!clientId) {
       return new Response(JSON.stringify({ error: "clientId required" }), { status: 400 });
     }
@@ -24,7 +29,7 @@ export async function POST(req: NextRequest) {
           price_data: {
             currency: "usd",
             product_data: { name: "Cut-List Export (SVG/G-code)" },
-            unit_amount: 699 // $6.99
+            unit_amount: 699
           },
           quantity: 1
         }
