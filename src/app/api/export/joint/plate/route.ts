@@ -3,29 +3,36 @@ import type { Spec } from "@/lib/schema";
 
 export const runtime = "nodejs";
 
-/** Pixel-based dimension line with arrows and label (all coords in px). */
-function dimLinePx(x1:number,y1:number,x2:number,y2:number,label:string,fontPx:number,color="#555") {
+/** Pixel-based dim line with arrow caps + high-contrast label (stroke halo) */
+function dimLinePx(
+  x1:number,y1:number,x2:number,y2:number,
+  label:string, fontPx:number, labelOffsetPx:number, color="#555"
+) {
   const dx = x2 - x1, dy = y2 - y1;
   const len = Math.hypot(dx, dy) || 1;
   const ux = dx/len, uy = dy/len;
-  const tick = Math.min(14, Math.max(8, len*0.06)); // arrow size in px
+  const tick = Math.min(18, Math.max(10, len*0.08)); // arrow size
   const ax1x = x1 + ux*tick, ax1y = y1 + uy*tick;
   const ax2x = x2 - ux*tick, ax2y = y2 - uy*tick;
 
-  // Offset label a bit off the line (perpendicular)
-  const off = 10;
-  const lx = (x1+x2)/2 - uy*off;
-  const ly = (y1+y2)/2 + ux*off;
+  // label position slightly off the line (perpendicular)
+  const lx = (x1+x2)/2 - uy*labelOffsetPx;
+  const ly = (y1+y2)/2 + ux*labelOffsetPx;
 
   return `
-  <g stroke="${color}" fill="none" stroke-width="${Math.max(1, len*0.015)}">
+  <g stroke="${color}" fill="none" stroke-width="${Math.max(1.25, len*0.02)}">
     <line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" />
+    <!-- arrow caps -->
     <line x1="${x1}" y1="${y1}" x2="${ax1x + (-uy)*tick/2}" y2="${ax1y + (ux)*tick/2}" />
     <line x1="${x1}" y1="${y1}" x2="${ax1x + (uy)*tick/2}"  y2="${ax1y + (-ux)*tick/2}" />
     <line x1="${x2}" y1="${y2}" x2="${ax2x + (-uy)*tick/2}" y2="${ax2y + (ux)*tick/2}" />
     <line x1="${x2}" y1="${y2}" x2="${ax2x + (uy)*tick/2}"  y2="${ax2y + (-ux)*tick/2}" />
-    <text x="${lx}" y="${ly}" font-size="${fontPx}" fill="#333" text-anchor="middle" dominant-baseline="middle">${label}</text>
-  </g>`;
+  </g>
+  <!-- high-contrast label: white stroke halo + dark fill -->
+  <text x="${lx}" y="${ly}" font-size="${fontPx}" text-anchor="middle" dominant-baseline="middle"
+        fill="#111" stroke="#fff" stroke-width="${Math.max(2.5, fontPx*0.22)}" paint-order="stroke">
+    ${label}
+  </text>`;
 }
 
 export async function GET(req: Request) {
@@ -36,58 +43,55 @@ export async function GET(req: Request) {
 
     const host   = url.searchParams.get("host")   || undefined;   // e.g., "Leg"
     const insert = url.searchParams.get("insert") || undefined;   // e.g., "Apron - Front"
-    const wpx    = Math.min(1600, Math.max(500, Number(url.searchParams.get("w") || 800)));
-    const fontPx = Math.min(24, Math.max(12, Number(url.searchParams.get("font") || 16)));
+    const wpx    = Math.min(1600, Math.max(500, Number(url.searchParams.get("w")    || 800)));
+    const fontPx = Math.min(28,   Math.max(12,  Number(url.searchParams.get("font") || 18)));
+    const offPxQ = Number(url.searchParams.get("off") || "24");   // label offset in px (both dims)
     const showTitle = url.searchParams.get("title") !== "0";
 
     const spec = JSON.parse(raw) as Spec;
     const g = mortiseTenonParams(spec, host, insert);
     const units = g.units;
-    const label = (v:number) => `${v}${units === "mm" ? " mm" : " in"}`;
+    const labelU = (v:number) => `${v}${units === "mm" ? " mm" : " in"}`;
 
-    // ==== LAYOUT IN UNITS (in/mm) ====
-    const padU   = units === "mm" ? 6 : 0.25;        // padding inside face (units)
-    const legT   = Math.max(g.host.section.t, 0.75); // assume at least 3/4" or 19mm for readability
+    // ---- Layout in units (auto-fit) ----
+    const padU   = units === "mm" ? 6 : 0.25;
+    const legT   = Math.max(g.host.section.t, units === "mm" ? 19 : 0.75);
     const faceU  = Math.max(legT, g.mortise.width + padU*2, g.mortise.height + padU*2);
     const marginU= faceU * 0.35;
-    const titleU = showTitle ? faceU * 0.20 : faceU * 0.08;
+    const titleU = showTitle ? faceU * 0.22 : faceU * 0.08;
     const footU  = faceU * 0.18;
 
     const viewW_U = faceU + marginU*2;
     const viewH_U = titleU + faceU + footU;
 
-    // ==== SCALE TO PIXELS ====
-    const s = wpx / viewW_U;                 // px per unit
+    // ---- scale to pixels ----
+    const s = wpx / viewW_U;        // px per unit
     const hpx = Math.round(s * viewH_U);
-
-    // Convert units -> px helper
     const ux = (u:number) => u * s;
 
-    // Face rect (px)
+    // face rect (px)
     const fx = ux((viewW_U - faceU)/2);
     const fy = ux(titleU);
     const fw = ux(faceU);
     const fh = ux(faceU);
 
-    // Mortise rect (px), centered
+    // mortise rect (px)
     const mx = fx + ux((faceU - g.mortise.width)/2);
     const my = fy + ux((faceU - g.mortise.height)/2);
     const mw = ux(g.mortise.width);
     const mh = ux(g.mortise.height);
 
-    // Dim offsets (px)
-    const offW = Math.min(ux(padU*0.9), Math.max(18, fw*0.12)); // left of mortise
-    const offH = Math.min(ux(padU*0.9), Math.max(18, fh*0.12)); // below mortise
+    // dim offsets (px) — push labels further for clarity
+    const offW = Math.max(offPxQ, fw * 0.18);   // left of mortise
+    const offH = Math.max(offPxQ, fh * 0.18);   // below mortise
 
-    // Axis/stroke thickness in px
-    const faceStroke = Math.max(1, fw*0.012);
-    const mortStroke = Math.max(1.2, fw*0.015);
-    const axisStroke = Math.max(0.8, fw*0.008);
+    // strokes in px
+    const faceStroke = Math.max(1.2, fw*0.012);
+    const mortStroke = Math.max(1.6, fw*0.015);
+    const axisStroke = Math.max(1.0, fw*0.010);
 
-    // Title y in px
-    const titleY = Math.max(fontPx + 6, ux(titleU * 0.6));
+    const titleY = Math.max(fontPx + 8, ux(titleU * 0.60));
 
-    // Build SVG (pixel viewBox so text sizes are true px)
     const svg = `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg"
      viewBox="0 0 ${wpx} ${hpx}"
@@ -97,8 +101,8 @@ export async function GET(req: Request) {
     .face { fill:#fafafa; stroke:#999; }
     .mort { fill:#e6f0ff; stroke:#2563eb; }
     .axis { stroke:#e2e2e2; }
-    .lbl  { font-size:${fontPx}px; fill:#111; font-weight:600; }
-    .tiny { font-size:${Math.max(12, fontPx-2)}px; fill:#555; }
+    .lbl  { font-size:${fontPx}px; fill:#111; font-weight:700; }
+    .tiny { font-size:${Math.max(13, fontPx-3)}px; fill:#333; }
   </style>
 
   ${showTitle ? `<text class="lbl" x="${wpx/2}" y="${titleY}" text-anchor="middle">
@@ -116,14 +120,14 @@ export async function GET(req: Request) {
   <rect class="mort" x="${mx}" y="${my}" width="${mw}" height="${mh}" stroke-width="${mortStroke}"/>
 
   <!-- width dim (below) -->
-  ${dimLinePx(mx, my + mh + offH, mx + mw, my + mh + offH, label(g.mortise.width), fontPx)}
+  ${dimLinePx(mx, my + mh + offH, mx + mw, my + mh + offH, labelU(g.mortise.width), fontPx, Math.max(16, offPxQ*0.75))}
 
   <!-- height dim (left) -->
-  ${dimLinePx(mx - offW, my, mx - offW, my + mh, label(g.mortise.height), fontPx)}
+  ${dimLinePx(mx - offW, my, mx - offW, my + mh, labelU(g.mortise.height), fontPx, Math.max(16, offPxQ*0.75))}
 
-  <!-- depth note (bottom-right corner of face) -->
-  <text class="tiny" x="${fx + fw}" y="${fy + fh + Math.max(14, fontPx)}" text-anchor="end">
-    Depth: ${label(g.mortise.depth)}  •  Tenon: ${label(g.tenon.thickness)} × ${label(g.tenon.length)}
+  <!-- depth note -->
+  <text class="tiny" x="${fx + fw}" y="${fy + fh + Math.max(18, fontPx)}" text-anchor="end">
+    Depth: ${labelU(g.mortise.depth)} • Tenon: ${labelU(g.tenon.thickness)} × ${labelU(g.tenon.length)}
   </text>
 </svg>`;
 
@@ -131,6 +135,7 @@ export async function GET(req: Request) {
       headers: { "Content-Type": "image/svg+xml", "Cache-Control": "no-store" }
     });
   } catch (e:any) {
-    return new Response(`Plate error: ${e?.message || e}`, { status: 400 });
+    const msg = (e && (e as any).message) ? (e as any).message : String(e);
+    return new Response("Plate error: " + msg, { status: 400 });
   }
 }
