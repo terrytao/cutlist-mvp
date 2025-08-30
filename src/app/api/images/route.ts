@@ -17,13 +17,13 @@ type ImageSize = "1024x1024" | "1024x1536" | "1536x1024" | "auto";
 
 export async function POST(req: Request) {
   try {
-    const { prompt, refine, negative, style, count = 3, size = "1024x1024" } = await req.json();
+    const { prompt, refine, negative, style, count = 1, size = "1024x1024" } = await req.json();
     if (!process.env.OPENAI_API_KEY?.trim()) {
       return new Response(JSON.stringify({ error: "OPENAI_API_KEY missing" }), { status: 400 });
     }
     if (!client) client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
 
-    const n = Math.max(1, Math.min(8, Number(count) || 3));
+    const n = Math.max(1, Math.min(8, Number(count) || 1));
     const fullPrompt = buildPrompt(prompt, refine, negative, style);
     const allowedSizes: ImageSize[] = ["1024x1024", "1024x1536", "1536x1024", "auto"];
     const sizeOpt: ImageSize = (allowedSizes as readonly string[]).includes(size) ? (size as ImageSize) : "1024x1024";

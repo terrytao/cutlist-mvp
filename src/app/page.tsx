@@ -104,7 +104,7 @@ export default function Home() {
 
   async function generateBase() {
     try { setError(null); setLoading("gen"); setSpec(null); setShowSvg(false);
-      const data = await callImagesApi({ prompt: basePrompt, count: 3, size: imgSize, style });
+      const data = await callImagesApi({ prompt: basePrompt, count: 1, size: imgSize, style });
       setRounds([{ images: data.images, selected: null, note: "base" }]); setIdx(0);
     } catch (e:any) { setError(e.message); }
     finally { setLoading(null); refreshTrial(); }
@@ -116,7 +116,7 @@ export default function Home() {
     if (cur.selected === null) { setError("Pick one picture to refine from."); return; }
     try { setError(null); setLoading("refine"); setSpec(null); setShowSvg(false);
       const fullPrompt = `${basePrompt}. Reference the chosen concept (materials/proportions) and apply: ${refineText}.`;
-      const data = await callImagesApi({ prompt: fullPrompt, count: 3, size: imgSize, style });
+      const data = await callImagesApi({ prompt: fullPrompt, count: 1, size: imgSize, style });
       const next: Round = { images: data.images, selected: null, note: refineText || "(refine)" };
       setRounds(prev => { const arr = [...prev, next]; return arr.length > 5 ? arr.slice(arr.length - 5) : arr; });
       setIdx(i => Math.min(i + 1, 4)); setRefineText("");
@@ -140,7 +140,7 @@ export default function Home() {
 
   // Accurate joinery previews tied to selected image
   useEffect(() => {
-    if (!current.images.length || current.selected === null) { setJoinImgs([]); return; }
+    if (!current.images.length || current.selected === null) { if (joinImgs.length) setJoinImgs([]); return; }
     setJoinImgs([]); const reqId = (autoJoinReq.current += 1);
     const chosenImg = current.images[current.selected];
     const acA = new AbortController(), acS = new AbortController(), acJ = new AbortController();
@@ -173,7 +173,7 @@ export default function Home() {
     };
     const timer = setTimeout(run, 300);
     return () => { clearTimeout(timer); acA.abort(); acS.abort(); acJ.abort(); };
-  }, [idx, current.selected, current.images, basePrompt, units]);
+  }, [idx, current.selected, current.images, basePrompt, units, joinImgs.length]);
 
   // Stripe: start Checkout with current clientId
   async function buyExport() {
@@ -252,7 +252,7 @@ export default function Home() {
                 <option>Craft catalog (natural light, grain emphasis)</option>
               </select>
               <div className="pt-4">
-                <Btn onClick={generateBase} disabled={loading!==null}>{loading==="gen" ? "Generating…" : "Generate (3)"}</Btn>
+                <Btn onClick={generateBase} disabled={loading!==null}>{loading==="gen" ? "Generating…" : "Generate (1)"}</Btn>
               </div>
             </div>
           </div>
@@ -293,7 +293,7 @@ export default function Home() {
               <input className="flex-1 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-950 px-3 py-2 text-sm focus:ring-2 focus:ring-black dark:focus:ring-white"
                 value={refineText} onChange={e=>setRefineText(e.target.value)} placeholder="e.g., taper legs, walnut, beveled top, lowered apron…" />
               <Btn variant="ghost" onClick={refineRound} disabled={loading!==null || current.selected===null}>
-                {loading==="refine" ? "Refining…" : "Refine (3)"}
+                {loading==="refine" ? "Refining…" : "Refine (1)"}
               </Btn>
             </div>
           </Section>
@@ -343,6 +343,28 @@ export default function Home() {
                       : <span className="inline-flex items-center gap-2 px-2 py-1 rounded-md border bg-amber-50 border-amber-200 text-amber-700">Preview only</span>}
                   </div>
                   <pre className="text-xs leading-5">{JSON.stringify(spec, null, 2)}</pre>
+<div className="mt-3 text-sm">
+  <div className="font-medium mb-1">Joint details (mortise/tenon):</div>
+  <div className="flex flex-wrap gap-3">
+    <a className="underline" target="_blank" rel="noreferrer"
+      href={`/api/export/joint/plate?spec=${encodeURIComponent(JSON.stringify(spec))}&host=Leg&insert=Apron%20-%20Front&w=1000`}>
+      Apron – Front plate
+    </a>
+    <a className="underline" target="_blank" rel="noreferrer"
+      href={`/api/export/joint/plate?spec=${encodeURIComponent(JSON.stringify(spec))}&host=Leg&insert=Apron%20-%20Back&w=1000`}>
+      Apron – Back plate
+    </a>
+    <a className="underline" target="_blank" rel="noreferrer"
+      href={`/api/export/joint/plate?spec=${encodeURIComponent(JSON.stringify(spec))}&host=Leg&insert=Apron%20-%20Left&w=1000`}>
+      Apron – Left plate
+    </a>
+    <a className="underline" target="_blank" rel="noreferrer"
+      href={`/api/export/joint/plate?spec=${encodeURIComponent(JSON.stringify(spec))}&host=Leg&insert=Apron%20-%20Right&w=1000`}>
+      Apron – Right plate
+    </a>
+  </div>
+</div>
+
                 </Card>
                 <Card className="overflow-hidden">
   {showSvg && svgUrl ? (
