@@ -4,6 +4,7 @@
 import React, { useRef, useState } from 'react';
 import PlatePreview from '@/components/PlatePreview';
 import { buildPlateUrl } from '@/lib/plateUrl';
+import JoineryHero from '@/components/JoineryHero'; // ⬅️ added
 
 type Spec = {
   units: 'mm' | 'in';
@@ -19,10 +20,10 @@ const mm = (v:number)=>v;
 const pick = <T,>(arr:T[], f:(x:T)=>boolean, fallback:T)=>arr.find(f) ?? fallback;
 
 function planJoineryFromSpec(spec: Spec){
-  const { W, D, H } = spec.assembly.overall;
+  const { D, H } = spec.assembly.overall;
   const mats = spec.materials || [];
-  const sideThk = pick(mats, m => m.thickness >= 15 && m.thickness <= 22, {name:'Plywood', thickness:18}).thickness;
-  const backThk = pick(mats, m => m.thickness <= 6.5, {name:'Back', thickness:6}).thickness;
+  const sideThk  = pick(mats, m => m.thickness >= 15 && m.thickness <= 22, {name:'Plywood', thickness:18}).thickness;
+  const backThk  = pick(mats, m => m.thickness <= 6.5, {name:'Back', thickness:6}).thickness;
   const shelfThk = pick(mats, m => m.thickness >= 15 && m.thickness <= 22, {name:'Shelf', thickness:18}).thickness;
 
   const sideHost = { name:'Side Panel', thickness: sideThk, length: mm(H), width: mm(D) };
@@ -33,13 +34,17 @@ function planJoineryFromSpec(spec: Spec){
   if (spec.assembly.joinery_policy.back === 'rabbet') {
     const rabWidth = Math.min(12, Math.round(D * 0.05));
     const rabDepth = Math.min(Math.round(sideThk * 0.6), backThk);
-    plates.push({ kind:'rabbet', spec:{ units:'mm', host:{ name:'Side Panel', thickness: sideThk }, insert:{ name:'Back Panel', thickness: backThk }, rabbet:{ width: rabWidth, depth: rabDepth } } });
+    plates.push({ kind:'rabbet',
+      spec:{ units:'mm', host:{ name:'Side Panel', thickness: sideThk }, insert:{ name:'Back Panel', thickness: backThk },
+             rabbet:{ width: rabWidth, depth: rabDepth } } });
     jobs.push({ type:'RABBET', edge:'N', host: sideHost, width: rabWidth, depth: rabDepth, label:'Back Rabbet (top edge)' });
   } else if (spec.assembly.joinery_policy.back === 'groove') {
     const grooveW = Math.min(backThk, 6.35);
     const grooveD = Math.min(Math.round(sideThk * 0.5), backThk);
     const offsetY = Math.round(H * 0.5);
-    plates.push({ kind:'groove', spec:{ units:'mm', host:{ name:'Side Panel', thickness: sideThk, length:H, width:D }, groove:{ axis:'X', width: grooveW, depth: grooveD, offset: offsetY } } });
+    plates.push({ kind:'groove',
+      spec:{ units:'mm', host:{ name:'Side Panel', thickness: sideThk, length:H, width:D },
+             groove:{ axis:'X', width: grooveW, depth: grooveD, offset: offsetY } } });
     jobs.push({ type:'GROOVE', axis:'X', host: sideHost, offset: offsetY, width: grooveW, depth: grooveD, label:'Back Groove (center)' });
   }
 
@@ -47,7 +52,10 @@ function planJoineryFromSpec(spec: Spec){
     const shelfOffset = Math.round(H * 0.5);
     const dadoW = shelfThk;
     const dadoD = Math.min(Math.round(sideThk * 0.35), 8);
-    plates.push({ kind:'dado', spec:{ units:'mm', host:{ name:'Side Panel', thickness: sideThk, length:H, width:D }, insert:{ name:'Shelf', thickness:shelfThk }, dado:{ axis:'X', width:dadoW, depth:dadoD, offset:shelfOffset } } });
+    plates.push({ kind:'dado',
+      spec:{ units:'mm', host:{ name:'Side Panel', thickness: sideThk, length:H, width:D },
+             insert:{ name:'Shelf', thickness:shelfThk },
+             dado:{ axis:'X', width:dadoW, depth:dadoD, offset:shelfOffset } } });
     jobs.push({ type:'DADO', axis:'X', host: sideHost, offset: shelfOffset, width: dadoW, depth: dadoD, label:'Shelf Dado (mid)' });
   }
 
@@ -100,14 +108,7 @@ export default function OneClick() {
     if (!plan || !spec) return;
     const origin = window.location.origin;
     const plateUrls = plan.plates.map(p => origin + buildPlateUrl(p.kind, p.spec, { title: true, w: 1000, font: 18, host: p.host, insert: p.insert }));
-    const payload = {
-      spec,
-      units: plan.toolDefaults.units,
-      tooling: plan.toolDefaults.tooling,
-      jobs: plan.jobs,
-      plateUrls,
-      filename: 'cutlist-package'
-    };
+    const payload = { spec, units: plan.toolDefaults.units, tooling: plan.toolDefaults.tooling, jobs: plan.jobs, plateUrls, filename: 'cutlist-package' };
     const res = await fetch('/api/export/package', { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify(payload) });
     const blob = await res.blob();
     if (!res.ok) { const t = await blob.text(); alert(t); return; }
@@ -153,6 +154,14 @@ export default function OneClick() {
               <pre style={{ whiteSpace:'pre-wrap', fontSize:12 }}>{JSON.stringify(debug, null, 2)}</pre>
             </details>
           )}
+        </div>
+      )}
+
+      {/* ⬇️ Render JoineryHero here — after we have both spec & plan */}
+      {plan && spec && (
+        <div style={{ marginTop: 24 }}>
+          <h2 style={{ fontSize:18, marginBottom:8 }}>Joinery Preview Image (free)</h2>
+          <JoineryHero spec={spec} plates={plan.plates} />
         </div>
       )}
 
