@@ -2,6 +2,28 @@ import OpenAI from "openai";
 import { consumeTrial } from "@/lib/trial";
 export const runtime = "nodejs";
 
+
+// at top
+const ENABLE_IMAGE_GEN = process.env.ENABLE_IMAGE_GEN === '1';
+
+export async function POST(req: Request) {
+  const body = await req.json();
+  // If decorative photo isn't essential, skip it
+  if (!ENABLE_IMAGE_GEN) {
+    // Return only server-made SVG plate URLs (free)
+    return Response.json({
+      photo: null,
+      plates: [
+        "/api/export/joint/rabbet?...",
+        "/api/export/joint/dado?...",
+        "/api/export/joint/groove?..."
+      ]
+    });
+  }
+
+  // ...otherwise call your image provider here (paid)...
+}
+
 let client: OpenAI | null = null;
 
 async function withRetry<T>(fn: () => Promise<T>, maxAttempts = 4, baseMs = 300, capMs = 4000): Promise<T> {
