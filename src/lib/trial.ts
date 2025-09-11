@@ -19,10 +19,11 @@ export async function getTrialStatus(req: Request) {
     try {
       used = Number((await redis.get<number>(`trial:${id}`)) ?? 0);
       ttl = await redis.ttl(`trial:${id}`);
-    } catch (e) {
+  } catch (e: unknown) {
       used = 0;
       ttl = null;
-      console.error("trial status redis error:", (e as any)?.message || e);
+      const msg = e && typeof e === 'object' && 'message' in e ? String((e as { message?: unknown }).message) : String(e);
+      console.error("trial status redis error:", msg);
     }
   }
   return { clientId: id, usedCents: used, capCents: CAP, remainingCents: Math.max(0, CAP - used), ttlSec: ttl };
@@ -41,8 +42,9 @@ export async function consumeTrial(req: Request, costCents: number) {
     const newUsed = used + costCents;
     await redis.set(key, newUsed, { ex: PERIOD_DAYS * 24 * 60 * 60 });
     return { allowed: true, usedCents: newUsed, remainingCents: CAP - newUsed };
-  } catch (e) {
-    console.error("consume trial redis error:", (e as any)?.message || e);
+  } catch (e: unknown) {
+    const msg = e && typeof e === 'object' && 'message' in e ? String((e as { message?: unknown }).message) : String(e);
+    console.error("consume trial redis error:", msg);
     return { allowed: true, usedCents: 0, remainingCents: CAP };
   }
 }
@@ -55,8 +57,9 @@ export async function hasEntitlement(req: Request): Promise<boolean> {
   try {
     const v = await redis.get(`entitled:${id}`);
     return Boolean(v);
-  } catch (e) {
-    console.error("entitlement check failed:", (e as any)?.message || e);
+  } catch (e: unknown) {
+    const msg = e && typeof e === 'object' && 'message' in e ? String((e as { message?: unknown }).message) : String(e);
+    console.error("entitlement check failed:", msg);
     return false;
   }
 }
@@ -66,7 +69,8 @@ export async function grantEntitlementByClientId(clientId: string, days = 30) {
   if (!redis) return;
   try {
     await redis.set(`entitled:${clientId}`, 1, { ex: days * 24 * 60 * 60 });
-  } catch (e) {
-    console.error("entitlement grant failed:", (e as any)?.message || e);
+  } catch (e: unknown) {
+    const msg = e && typeof e === 'object' && 'message' in e ? String((e as { message?: unknown }).message) : String(e);
+    console.error("entitlement grant failed:", msg);
   }
 }

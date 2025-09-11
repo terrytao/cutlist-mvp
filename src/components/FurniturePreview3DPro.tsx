@@ -59,7 +59,7 @@ function useWoodMaterial(wood?: WoodTex, fallbackColor = '#D6C4A9', rough = 0.5)
     if (t) {
       t.colorSpace = THREE.SRGBColorSpace;
       t.wrapS = t.wrapT = THREE.RepeatWrapping;
-      (t as any).anisotropy = 8;
+      t.anisotropy = 8;
       t.repeat.set(1, 1);
     }
   });
@@ -203,7 +203,7 @@ export default function FurniturePreview3DPro({ spec, woodTop, woodLeg }: { spec
         onCreated={({ gl }) => {
           gl.toneMapping = THREE.ACESFilmicToneMapping;
           gl.toneMappingExposure = 1.0;
-          // @ts-ignore
+          // @ts-expect-error three types: outputColorSpace differs across versions
           gl.outputColorSpace = THREE.SRGBColorSpace;
           gl.physicallyCorrectLights = true;
         }}
@@ -231,4 +231,3 @@ export default function FurniturePreview3DPro({ spec, woodTop, woodLeg }: { spec
     </div>
   );
 }
-

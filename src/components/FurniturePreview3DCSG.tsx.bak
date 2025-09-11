@@ -56,7 +56,7 @@ function ModelCSG({ spec, joins }:{ spec: Spec; joins: Join[] }) {
     'leg-br':[Wm - legThk/2,     Dm - legThk/2,   legZ],
     'leg-bl':[legThk/2,          Dm - legThk/2,   legZ]
   };
-  const apronZ = Hm - apronDrop - apronH/2;
+
 
   // Top cutters: DADO/GROOVE X and RABBET at N/E
   const topCutters: THREE.Mesh[] = [];
@@ -124,7 +124,7 @@ function ModelCSG({ spec, joins }:{ spec: Spec; joins: Join[] }) {
   legMeshes[2].position.set(...(legsPos['leg-br']));
   legMeshes[3].position.set(...(legsPos['leg-bl']));
 
- 
+  const apronZ = Hm - apronDrop - apronH/2;
 
   return (
     <group>
@@ -162,7 +162,7 @@ export default function FurniturePreview3DCSG({ spec, joins }:{ spec:Spec; joins
         onCreated={({gl})=>{
           gl.toneMapping = THREE.ACESFilmicToneMapping;
           gl.toneMappingExposure = 1.0;
-          // @ts-expect-error three types: outputColorSpace differs across versions
+          // @ts-ignore
           gl.outputColorSpace = THREE.SRGBColorSpace;
           gl.physicallyCorrectLights = true;
         }}

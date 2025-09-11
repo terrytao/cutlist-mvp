@@ -14,7 +14,7 @@ export default function PlatePreview({
   className,
 }: {
   kind: PlateKind;
-  spec: any;
+  spec: unknown;
   title?: boolean;
   w?: number;
   font?: number;
@@ -55,10 +55,11 @@ export default function PlatePreview({
           return;
         }
         if (!cancelled) setState('ok');
-      } catch (e: any) {
+      } catch (e: unknown) {
         if (!cancelled) {
           setState('error');
-          setDetail(String(e?.message ?? e));
+          const msg = e && typeof e === 'object' && 'message' in e ? String((e as { message?: unknown }).message) : String(e);
+          setDetail(msg);
         }
       }
     })();

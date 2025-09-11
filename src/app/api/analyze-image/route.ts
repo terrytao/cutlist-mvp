@@ -53,7 +53,8 @@ export async function POST(req: Request) {
 
     const json = JSON.parse(resp.output_text || "{}");
     return new Response(JSON.stringify({ style: json }), { headers: { "Content-Type": "application/json" } });
-  } catch (e: any) {
-    return new Response(JSON.stringify({ error: e?.message || "analyze failed" }), { status: 400 });
+  } catch (e: unknown) {
+    const msg = e && typeof e === 'object' && 'message' in e ? String((e as { message?: unknown }).message) : 'analyze failed';
+    return new Response(JSON.stringify({ error: msg }), { status: 400 });
   }
 }

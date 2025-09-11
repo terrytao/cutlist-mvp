@@ -2,7 +2,7 @@ export type PlateKind = 'rabbet'|'dado'|'groove'|'mortise'|'tenon';
 
 export function buildPlateUrl(
   kind: PlateKind,
-  spec: any,
+  spec: unknown,
   opts?: { title?: boolean; w?: number; font?: number; host?: string; insert?: string }
 ) {
   const params = new URLSearchParams();

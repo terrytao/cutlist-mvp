@@ -408,7 +408,7 @@ export default function Home() {
       </div>
     </div>
   ) : (
-    <div className="p-6 text-sm text-gray-500">Click "Use selected → Cut list + SVG".</div>
+    <div className="p-6 text-sm text-gray-500">Click &quot;Use selected → Cut list + SVG&quot;.</div>
   )}
 </Card>
               </div>

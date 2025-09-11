@@ -46,7 +46,7 @@ export function applyDadoOffsets(
 ): Part[] {
   const depthDefault = units === "mm" ? 6 : 0.25; // 6mm or 1/4"
   return list.map(p => {
-    let out = { ...p };
+    const out = { ...p };
     for (const j of joinery) {
       if (!j.type.toLowerCase().includes("dado")) continue;
       const d = j.depth ?? depthDefault;

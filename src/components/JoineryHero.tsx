@@ -9,7 +9,7 @@ type Spec = {
   materials?: { name:string; thickness:number }[];
 };
 
-type Plate = { kind: PlateKind; spec: any; host?: string; insert?: string };
+type Plate = { kind: PlateKind; spec: unknown; host?: string; insert?: string };
 
 async function loadImg(url: string): Promise<HTMLImageElement> {
   return new Promise((res, rej) => {

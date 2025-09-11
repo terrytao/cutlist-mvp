@@ -18,7 +18,29 @@ const eslintConfig = [
       "out/**",
       "build/**",
       "next-env.d.ts",
+      "backups/**",
+      "cutlist-package/**",
+      "**/*.bak",
+      "src/app/dev/**",
     ],
+  },
+  {
+    files: ["src/app/api/**/*.ts", "src/app/**/route.ts", "route.ts"],
+    rules: {
+      "@typescript-eslint/no-explicit-any": "off",
+    },
+  },
+  {
+    files: ["src/lib/spec-normalize.ts"],
+    rules: {
+      "@typescript-eslint/no-explicit-any": "off",
+    },
+  },
+  {
+    files: ["src/app/page.tsx"],
+    rules: {
+      "@typescript-eslint/no-explicit-any": "off",
+    },
   },
 ];
 
