@@ -1,6 +1,7 @@
 // src/app/api/spec/route.ts
 import OpenAI from "openai";
 import { z } from "zod";
+import { normalizeSpec } from "@/lib/spec-normalize";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -28,62 +29,34 @@ const SpecSchema = z.object({
 });
 type Spec = z.infer<typeof SpecSchema>;
 
-/* ---------------- Small helpers ---------------- */
-
-// Parse patterns like "2x4 feet", "2 x 4 ft", "48x24 in", etc.
+/* ---------------- Helpers ---------------- */
 function parseDimsFromPrompt(prompt: string): { Wmm?: number; Dmm?: number; Hmm?: number } {
-  const p = prompt.toLowerCase().replace(/[\u00D7]/g, "x"); // × -> x
-  // Try formats: "<a>x<b> ft|feet" or "<a> x <b> in|inch|inches"
+  const p = prompt.toLowerCase().replace(/[\u00D7]/g, "x");
   const mFt = p.match(/(\d+(?:\.\d+)?)\s*x\s*(\d+(?:\.\d+)?)\s*(?:ft|feet)\b/);
   const mIn = p.match(/(\d+(?:\.\d+)?)\s*x\s*(\d+(?:\.\d+)?)\s*(?:in|inch|inches)\b/);
-
-  let W_in: number | undefined;
-  let D_in: number | undefined;
-
-  if (mFt) {
-    W_in = parseFloat(mFt[1]) * 12;
-    D_in = parseFloat(mFt[2]) * 12;
-  } else if (mIn) {
-    W_in = parseFloat(mIn[1]);
-    D_in = parseFloat(mIn[2]);
-  }
-
-  // Coffee table typical height ~ 17–19 in; default 18 in if not given
+  let W_in: number | undefined, D_in: number | undefined;
+  if (mFt) { W_in = parseFloat(mFt[1]) * 12; D_in = parseFloat(mFt[2]) * 12; }
+  else if (mIn) { W_in = parseFloat(mIn[1]); D_in = parseFloat(mIn[2]); }
   let H_in: number | undefined;
   const mH = p.match(/(\d+(?:\.\d+)?)\s*(?:in|inch|inches)\s*(?:tall|height|high)\b/);
   if (mH) H_in = parseFloat(mH[1]);
-  if (!H_in) {
-    if (p.includes("coffee table")) H_in = 18;
-  }
-
+  if (!H_in && /coffee\s*table/i.test(p)) H_in = 18;
   const toMM = (inches: number) => Math.round(inches * 25.4);
-  return {
-    Wmm: W_in ? toMM(W_in) : undefined,
-    Dmm: D_in ? toMM(D_in) : undefined,
-    Hmm: H_in ? toMM(H_in) : undefined,
-  };
+  return { Wmm: W_in ? toMM(W_in) : undefined, Dmm: D_in ? toMM(D_in) : undefined, Hmm: H_in ? toMM(H_in) : undefined };
 }
 
-// Build a safe fallback spec from prompt if the model fails twice
 function fallbackSpec(prompt: string): Spec {
   const { Wmm, Dmm, Hmm } = parseDimsFromPrompt(prompt);
-  const W = Wmm ?? 1220;  // ~48"
-  const D = Dmm ?? 610;   // ~24"
-  const H = Hmm ?? 450;   // ~18"
-  const type = /coffee\s*table/i.test(prompt) ? "coffee_table" : "project";
-
+  const W = Wmm ?? 1220, D = Dmm ?? 610, H = Hmm ?? 450;
+  const type = /coffee\s*table/i.test(prompt) ? "coffee table" : "project";
   return {
     units: "mm",
     materials: [{ name: "Birch Ply", thickness: 18 }],
-    assembly: {
-      type,
-      overall: { W, D, H },
-      joinery_policy: { fits: "standard" }
-    }
+    assembly: { type, overall: { W, D, H }, joinery_policy: { fits: "standard" } }
   };
 }
 
-/* ---------------- Simple dev cache ---------------- */
+/* ---------------- Cache ---------------- */
 const mem = new Map<string, Spec>();
 const cacheKey = (obj: any) => JSON.stringify(obj);
 
@@ -104,15 +77,14 @@ export async function POST(req: Request) {
       });
     }
 
-    // $0 runs when desired
+    // $0 mode
     if (process.env.DRY_RUN_LLM === "1") {
-      const demo = fallbackSpec(prompt);
+      const demo = normalizeSpec(fallbackSpec(prompt), prompt);
       return new Response(JSON.stringify({ spec: demo, _debug: { dryRun: true } }, null, 2), {
         headers: { "Content-Type": "application/json" }
       });
     }
 
-    // Cache
     const key = cacheKey({ prompt, imageUrl });
     if (mem.has(key)) {
       return new Response(JSON.stringify({ spec: mem.get(key), _debug: { cache: true } }, null, 2), {
@@ -124,19 +96,19 @@ export async function POST(req: Request) {
     const model = process.env.SPEC_MODEL || "gpt-4o-mini";
 
     const system =
-      "You are a woodworking/CAD assistant. Output ONLY JSON that matches the schema exactly. " +
-      "If the prompt lacks height, use a reasonable default for the furniture type (e.g., coffee table ~18 inches). " +
+      "You are a woodworking/CAD assistant. Output ONLY JSON matching the schema exactly. " +
+      "If height is not given, use a reasonable default for the furniture type (coffee table ~18in). " +
       "Default units to 'mm'. Do not include any text outside JSON.";
 
     const schemaHint = `
 Required JSON shape:
 {
   "units": "mm|in",
-  "materials": [{"name": "string", "thickness": number}],
+  "materials": [{"name":"string","thickness":number}],
   "assembly": {
-    "type": "string",
-    "overall": {"W": number, "D": number, "H": number},
-    "joinery_policy": {"shelves": "dado|screw|none"?, "back": "rabbet|groove|none"?, "fits":"snug|standard|loose"}
+    "type":"string",
+    "overall":{"W":number,"D":number,"H":number},
+    "joinery_policy":{"shelves":"dado|screw|none"?, "back":"rabbet|groove|none"?, "fits":"snug|standard|loose"}
   }
 }`;
 
@@ -151,7 +123,7 @@ Required JSON shape:
       }
     ];
 
-    // ---- First attempt
+    // Attempt 1
     const res1 = await client.chat.completions.create({
       model, temperature: 0, messages: baseMessages,
       response_format: { type: "json_object" }, max_tokens: 800
@@ -159,17 +131,18 @@ Required JSON shape:
 
     let raw = res1.choices[0]?.message?.content ?? "{}";
     try {
-      const spec = SpecSchema.parse(JSON.parse(raw));
+      const parsed = SpecSchema.parse(JSON.parse(raw));
+      const spec = normalizeSpec(parsed, prompt);
       mem.set(key, spec);
       return new Response(JSON.stringify({
         spec, _debug: { requestedModel: model, actualModel: (res1 as any).model, usage: res1.usage, pass: 1 }
       }, null, 2), { headers: { "Content-Type": "application/json" } });
     } catch (e1: any) {
-      // ---- Repair attempt (ask model to fix according to Zod error)
+      // Repair attempt
       const errMsg = String(e1?.message ?? e1).slice(0, 800);
       const repairMessages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
         ...baseMessages,
-        { role: "assistant", content: raw }, // show what it produced
+        { role: "assistant", content: raw },
         { role: "user", content: `Your JSON failed validation with this error:\n${errMsg}\nReturn ONLY corrected JSON that matches the schema.` }
       ];
 
@@ -180,14 +153,15 @@ Required JSON shape:
 
       raw = res2.choices[0]?.message?.content ?? "{}";
       try {
-        const spec = SpecSchema.parse(JSON.parse(raw));
+        const parsed2 = SpecSchema.parse(JSON.parse(raw));
+        const spec = normalizeSpec(parsed2, prompt);
         mem.set(key, spec);
         return new Response(JSON.stringify({
           spec, _debug: { requestedModel: model, actualModel: (res2 as any).model, usage: res2.usage, pass: 2 }
         }, null, 2), { headers: { "Content-Type": "application/json" } });
       } catch {
-        // ---- Final fallback (no more spend; deterministic)
-        const spec = fallbackSpec(prompt);
+        // Final deterministic fallback
+        const spec = normalizeSpec(fallbackSpec(prompt), prompt);
         mem.set(key, spec);
         return new Response(JSON.stringify({
           spec, _debug: { fallback: true, note: "Model output failed schema twice; used prompt-derived defaults." }
