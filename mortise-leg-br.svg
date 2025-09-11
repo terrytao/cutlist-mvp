@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 226" width="900" height="226">
+  <style>
+    .board{fill:#fafafa;stroke:#999;stroke-width:1.5;}
+    .cut{fill:#ffece6;stroke:#e11d48;stroke-width:2;}
+    .lbl{font-size:18px;fill:#111;font-weight:700;font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Arial;}
+    .tiny{font-size:15px;fill:#333;}
+  </style>
+  <text class="lbl" x="450" y="26" text-anchor="middle">Mortise — Leg - Back Right for Apron - Back (mm)</text>
+  <rect class="board" x="310" y="36" width="280" height="160"/>
+  <rect class="cut" x="310" y="26.39999999999999" width="44.800000000000004" height="179.20000000000002"/>
+  
+      <g stroke="#555" fill="none" stroke-width="3.584000000000001">
+        <line x1="284" y1="26.39999999999999" x2="284" y2="205.60000000000002"/>
+        <line x1="284" y1="26.39999999999999" x2="276.832" y2="40.736"/>
+        <line x1="284" y1="205.60000000000002" x2="291.168" y2="191.264"/>
+      </g>
+      <text x="272" y="116" font-size="18" text-anchor="middle" dominant-baseline="middle"
+        fill="#111" stroke="#fff" stroke-width="3.96" paint-order="stroke">Width: 80 mm</text>
+  
+      <g stroke="#555" fill="none" stroke-width="1.2">
+        <line x1="310" y1="231.60000000000002" x2="354.8" y2="231.60000000000002"/>
+        <line x1="310" y1="231.60000000000002" x2="320" y2="236.60000000000002"/>
+        <line x1="354.8" y1="231.60000000000002" x2="344.8" y2="226.60000000000002"/>
+      </g>
+      <text x="332.4" y="243.60000000000002" font-size="18" text-anchor="middle" dominant-baseline="middle"
+        fill="#111" stroke="#fff" stroke-width="3.96" paint-order="stroke">Depth: 20 mm</text>
+  <text class="tiny" x="590" y="214" text-anchor="end">
+    Tenon t=6 mm • len=18 mm
+  </text>
+</svg>

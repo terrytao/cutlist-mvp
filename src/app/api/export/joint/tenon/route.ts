@@ -2,13 +2,25 @@
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+// Add near the top of the file
+function parseSpecParam(raw: string) {
+  // Trim stray quotes users might paste around the value
+  const t = raw.trim().replace(/^'+|'+$/g, "").replace(/^"+|"+$/g, "");
+  // Try plain JSON first
+  try { return JSON.parse(t); } catch {}
+  // Then try URL-decoded JSON
+  try { return JSON.parse(decodeURIComponent(t)); } catch {}
+  // Last resort: show the first chars to debug
+  throw new Error(`Bad ?spec; starts with: ${t.slice(0, 40)}`);
+}
+
 export async function GET(req: Request) {
   try {
     const url = new URL(req.url);
     const raw = url.searchParams.get("spec");
     if (!raw) return new Response("Missing ?spec", { status: 400 });
 
-    const spec = JSON.parse(raw) as any; // { units, insert, mt, width? }
+    const spec = parseSpecParam(raw) as any; // { units, insert, mt, width? }
     const units = spec.units ?? "mm";
     const labelU = (v:number) => `${v}${units==="mm"?" mm":" in"}`;
     const wpx = Math.min(1400, Math.max(480, Number(url.searchParams.get("w")||900)));
