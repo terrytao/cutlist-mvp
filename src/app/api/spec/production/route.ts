@@ -74,7 +74,7 @@ export async function POST(req: Request) {
     try {
       const parsed = ProductionSpec.parse(JSON.parse(raw));
       return new Response(JSON.stringify({ spec: norm(parsed), _debug:{model:(r1 as any).model, usage:r1.usage, pass:1} },null,2),{headers:{'Content-Type':'application/json'}});
-    } catch (e1:any) {
+    } catch {
       const r2 = await client.chat.completions.create({
         model, temperature:0, max_tokens:2000,
         messages:[

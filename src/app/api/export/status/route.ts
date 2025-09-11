@@ -6,7 +6,7 @@ export async function GET(req: Request) {
     return new Response(JSON.stringify({ entitled }), {
       headers: { "Content-Type": "application/json", "Cache-Control": "no-store" }
     });
-  } catch (e: any) {
+  } catch {
     return new Response(JSON.stringify({ entitled: false, error: "status_failed" }), {
       status: 200,
       headers: { "Content-Type": "application/json", "Cache-Control": "no-store" }

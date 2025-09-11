@@ -1,6 +1,6 @@
 // src/lib/plates-from-joins.ts
 import { PlatePack, type PlatePackT, type PlateSpecT } from "@/lib/plate-schema";
-import { ProductionSpec, type ProductionSpecT } from "@/lib/prod-schema";
+import { type ProductionSpecT } from "@/lib/prod-schema";
 
 export function platesFromProductionSpec(spec: ProductionSpecT): PlatePackT {
   const out: PlatePackT = { version: "v1", units: spec.units || "mm", plates: [] };
@@ -72,4 +72,3 @@ export function platesFromProductionSpec(spec: ProductionSpecT): PlatePackT {
 
   return PlatePack.parse(out);
 }
-

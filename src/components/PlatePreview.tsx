@@ -1,6 +1,7 @@
 // src/components/PlatePreview.tsx
 'use client';
 import React, { useEffect, useMemo, useState } from 'react';
+import Image from 'next/image';
 import { buildPlateUrl, type PlateKind } from '@/lib/plateUrl';
 
 export default function PlatePreview({
@@ -73,11 +74,9 @@ export default function PlatePreview({
       </div>
       {state === 'loading' && <div style={{ color: '#666' }}>Loading…</div>}
       {state === 'ok' && (
-        <img
-          src={url}
-          alt={`${kind} plate`}
-          style={{ width: '100%', height: 'auto', display: 'block' }}
-        />
+        <div style={{ position: 'relative', width: '100%', height: 0, paddingBottom: '60%' }}>
+          <Image src={url} alt={`${kind} plate`} fill sizes="100vw" style={{ objectFit: 'contain' }} unoptimized />
+        </div>
       )}
       {state === 'error' && (
         <pre style={{ whiteSpace: 'pre-wrap', fontSize: 12, color: '#b00020', background: '#fff5f5', padding: 10, borderRadius: 8 }}>

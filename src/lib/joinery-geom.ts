@@ -9,7 +9,7 @@ function assertPos(n: number, name: string) {
   if (!(n > 0)) throw new Error(`${name} must be > 0`);
 }
 
-export function rabbetParams(spec: RabbetSpec, _hostId?: string, _insertId?: string) {
+export function rabbetParams(spec: RabbetSpec) {
   const units: Units = (spec.units ?? "mm") as Units;
   const host = { name: spec.host?.name ?? "Host", thickness: asNum(spec.host?.thickness, "host.thickness") };
   const insert = { name: spec.insert?.name ?? "Insert", thickness: asNum(spec.insert?.thickness, "insert.thickness") };
@@ -71,4 +71,5 @@ export function grooveParams(spec: GrooveSpec) {
   return { units, host, insert: spec.insert, groove: { width, depth, offset, axis } };
 }
 
-export default { rabbetParams, dadoParams, grooveParams };
+const JoineryGeom = { rabbetParams, dadoParams, grooveParams };
+export default JoineryGeom;

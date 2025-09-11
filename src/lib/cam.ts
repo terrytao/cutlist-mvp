@@ -1,5 +1,5 @@
 // src/lib/cam.ts
-import type { CamJob, CamRequest, Tooling, Units, EdgeId } from "@/lib/schema";
+import type { CamRequest, Tooling, Units, EdgeId } from "@/lib/schema";
 
 function nz(v: number | undefined, def: number){ return (v ?? def); }
 function s(v: number, d=3){ return Number(v.toFixed(d)); }

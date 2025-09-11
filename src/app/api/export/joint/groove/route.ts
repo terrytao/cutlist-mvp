@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 // src/app/api/export/joint/groove/route.ts
 export const runtime="nodejs"; export const dynamic="force-dynamic";
 type Units="mm"|"in"; type Host={name:string;thickness:number;length?:number;width?:number}; type Ins={name:string;thickness:number}; type Groove={axis?:"X"|"Y";width:number;depth:number;offset?:number};

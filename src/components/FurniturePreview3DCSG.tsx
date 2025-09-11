@@ -2,7 +2,7 @@
 'use client';
 
 import * as THREE from 'three';
-import React, { useMemo } from 'react';
+import React from 'react';
 import { Canvas } from '@react-three/fiber';
 import { Environment, OrbitControls, AccumulativeShadows, RandomizedLight, RoundedBox } from '@react-three/drei';
 import { CSG } from 'three-csg-ts';
@@ -46,9 +46,7 @@ function ModelCSG({ spec, joins }:{ spec: Spec; joins: Join[] }) {
   const { W, D, H } = toMM(spec);
   const Wm = mm2m(W), Dm = mm2m(D), Hm = mm2m(H);
   const { topThk, legThk, apronH, apronDrop } = derive(Wm, Dm, Hm);
-  const matTop = stdMat('#DCC9A6', 0.45), matLeg = stdMat('#CFBEA2', 0.6), matApr = stdMat('#D0BEA1', 0.58), matTen = stdMat('#e7b0a8', 0.45);
-
-  const topPos:[number,number,number] = [Wm/2, Dm/2, Hm - topThk/2];
+  const matTop = stdMat('#DCC9A6', 0.45), matLeg = stdMat('#CFBEA2', 0.6), matTen = stdMat('#e7b0a8', 0.45);
   const legZ = (Hm - topThk)/2;
   const legsPos = {
     'leg-fl':[legThk/2,          legThk/2,        legZ] as [number,number,number],
@@ -110,9 +108,11 @@ function ModelCSG({ spec, joins }:{ spec: Spec; joins: Join[] }) {
     ten.material = matTen; tenons.push(ten);
   });
 
-  // Build CSG meshes
-  const topMesh   = useMemo(()=> topWithCuts([Wm,Dm,topThk], topCutters), [Wm,Dm,topThk,topCutters.length]);
-  const legMeshes = useMemo(()=> (['leg-fl','leg-fr','leg-br','leg-bl'] as const).map(k=> legWithMortises([legThk,legThk,Hm-topThk], legCutters[k])), [Hm,topThk,legThk,legCutters]);
+  // Build CSG meshes (compute directly for simplicity)
+  const topMesh = topWithCuts([Wm, Dm, topThk], topCutters);
+  const legMeshes = (['leg-fl','leg-fr','leg-br','leg-bl'] as const).map(k =>
+    legWithMortises([legThk, legThk, Hm - topThk], legCutters[k])
+  );
 
   topMesh.material = matTop;
   legMeshes.forEach(m=> m.material = matLeg);

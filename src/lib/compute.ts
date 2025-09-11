@@ -52,7 +52,7 @@ export function computeJoinery(spec: Spec): Spec {
 
   // Mortise & tenon for leg+apron archetype
   if (!c || c.archetype === "leg_apron_stretcher") {
-    const apronHeightIn = apronHeightFromClass(c?.apron_height_class);
+    apronHeightFromClass(c?.apron_height_class);
     const mortTenonDepthIn = 0.5; // 1/2" into leg
     const mtDepth = toUnits(units, mortTenonDepthIn);
 

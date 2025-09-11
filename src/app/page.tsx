@@ -1,6 +1,7 @@
 "use client";
 import { useMemo, useRef, useState, useEffect } from "react";
 import Link from "next/link";
+import Image from "next/image";
 
 /* Types */
 type GenResp = { images: string[]; usedPrompt?: string };
@@ -67,7 +68,6 @@ export default function Home() {
 
   // Spec/SVG
   const [spec, setSpec] = useState<any>(null);
-  const [srcFlag, setSrcFlag] = useState<string | null>(null);
   const [showSvg, setShowSvg] = useState(false);
   const [svgNonce, setSvgNonce] = useState(0);
   const svgUrl = useMemo(() => {
@@ -142,7 +142,7 @@ export default function Home() {
         body: JSON.stringify({ prompt: basePrompt, units, imageDataUrl: chosen }) });
       const data: SpecResp = await res.json();
       if (!res.ok) throw new Error((data as any)?.error || "Spec generation failed");
-      setSpec(data.spec); setSrcFlag(data.source || null); setShowSvg(true); setSvgNonce(n => n + 1);
+      setSpec(data.spec); setShowSvg(true); setSvgNonce(n => n + 1);
     } catch (e:any) { setError(e.message); }
     finally { setLoading(null); refreshTrial(); }
   }
@@ -291,7 +291,9 @@ export default function Home() {
                   <div key={i}
                     onClick={() => { if (!rounds.length) return; const copy = rounds.slice(); copy[idx] = { ...copy[idx], selected: i }; setRounds(copy); }}
                     className={`group relative overflow-hidden rounded-2xl border ${sel ? "border-sky-400 ring-2 ring-sky-200" : "border-gray-200 dark:border-gray-800"} bg-white dark:bg-gray-950 cursor-pointer`}>
-                    <img src={src} alt={`Option ${i+1}`} className="w-full h-64 object-cover" />
+                    <div className="relative w-full h-64">
+                      <Image src={src} alt={`Option ${i+1}`} fill className="object-cover" sizes="(max-width: 768px) 100vw, 33vw"/>
+                    </div>
                     <div className="absolute top-2 left-2">
                       <span className={`px-2 py-1 rounded-md text-xs ${sel ? "bg-sky-600 text-white" : "bg-white/80 dark:bg-gray-900/80"}`}>
                         {sel ? "Selected" : "Pick"}
@@ -324,7 +326,9 @@ export default function Home() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {joinImgs.map((im, i) => (
                 <Card key={i} className="overflow-hidden">
-                  <img src={im.src} alt={im.title} className="w-full h-64 object-cover" />
+                  <div className="relative w-full h-64">
+                    <Image src={im.src} alt={im.title} fill className="object-cover" sizes="(max-width: 768px) 100vw, 33vw"/>
+                  </div>
                   <div className="p-3 text-sm text-gray-600 dark:text-gray-300">{im.title}</div>
                 </Card>
               ))}

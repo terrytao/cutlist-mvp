@@ -7,7 +7,7 @@ export const runtime = "nodejs";
 const ENABLE_IMAGE_GEN = process.env.ENABLE_IMAGE_GEN === '1';
 
 export async function POST(req: Request) {
-  const body = await req.json();
+  await req.json();
   // If decorative photo isn't essential, skip it
   if (!ENABLE_IMAGE_GEN) {
     // Return only server-made SVG plate URLs (free)
@@ -64,7 +64,7 @@ function sanitizeSize(size: any): "1024x1024" | "1024x1536" | "1536x1024" | "aut
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { spec, prompt, units = "in", count = 2, style, size } = body;
+    const { spec, count = 2, style, size } = body;
 
     if (!process.env.OPENAI_API_KEY?.trim()) {
       return new Response(JSON.stringify({ error: "OPENAI_API_KEY missing" }), { status: 400 });

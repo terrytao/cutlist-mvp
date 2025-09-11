@@ -1,7 +1,6 @@
 // src/app/api/plates/from-spec/route.ts
 import { ProductionSpec } from "@/lib/prod-schema";
 import { platesFromProductionSpec } from "@/lib/plates-from-joins";
-import { PlatePack } from "@/lib/plate-schema";
 import { buildPlateUrl } from "@/lib/plateUrl";
 
 export const runtime = "nodejs";
@@ -30,4 +29,3 @@ export async function POST(req: Request) {
     return new Response(JSON.stringify({ error: e?.message ?? String(e) }), { status: 400 });
   }
 }
-
