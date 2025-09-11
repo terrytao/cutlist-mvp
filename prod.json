@@ -2,35 +2,237 @@
   "spec": {
     "version": "v1",
     "units": "mm",
-    "metadata": { "type": "coffee_table", "title": "Coffee Table 2x2" },
-    "overall": { "W": 610, "D": 610, "H": 457 },
+    "metadata": {
+      "type": "coffee_table",
+      "title": "Coffee Table 2x2"
+    },
+    "overall": {
+      "W": 610,
+      "D": 610,
+      "H": 457
+    },
     "materials": [
-      { "name": "Plywood", "thickness": 18 },
-      { "name": "Pine",    "thickness": 50 }
+      {
+        "name": "Plywood",
+        "thickness": 18
+      },
+      {
+        "name": "Pine",
+        "thickness": 50
+      }
     ],
-    "tolerances": { "fitSnug": -0.1, "fitStandard": 0, "fitLoose": 0.2 },
+    "tolerances": {
+      "fitSnug": -0.1,
+      "fitStandard": 0,
+      "fitLoose": 0.2
+    },
     "cutlist": [
-      { "id": "top",    "name": "Top",               "material": "Plywood", "thickness": 18, "length": 610, "width": 610, "qty": 1 },
-
-      { "id": "leg-fl", "name": "Leg - Front Left",  "material": "Pine",    "thickness": 50, "length": 439, "width": 50,  "qty": 1 },
-      { "id": "leg-fr", "name": "Leg - Front Right", "material": "Pine",    "thickness": 50, "length": 439, "width": 50,  "qty": 1 },
-      { "id": "leg-bl", "name": "Leg - Back Left",   "material": "Pine",    "thickness": 50, "length": 439, "width": 50,  "qty": 1 },
-      { "id": "leg-br", "name": "Leg - Back Right",  "material": "Pine",    "thickness": 50, "length": 439, "width": 50,  "qty": 1 },
-
-      { "id": "apron-f","name": "Apron - Front",     "material": "Pine",    "thickness": 18, "length": 510, "width": 80,  "qty": 1 },
-      { "id": "apron-b","name": "Apron - Back",      "material": "Pine",    "thickness": 18, "length": 510, "width": 80,  "qty": 1 },
-      { "id": "apron-l","name": "Apron - Left",      "material": "Pine",    "thickness": 18, "length": 510, "width": 80,  "qty": 1 },
-      { "id": "apron-r","name": "Apron - Right",     "material": "Pine",    "thickness": 18, "length": 510, "width": 80,  "qty": 1 }
+      {
+        "id": "top",
+        "name": "Top",
+        "material": "Plywood",
+        "thickness": 18,
+        "length": 610,
+        "width": 610,
+        "qty": 1
+      },
+      {
+        "id": "leg-fl",
+        "name": "Leg - Front Left",
+        "material": "Pine",
+        "thickness": 50,
+        "length": 439,
+        "width": 50,
+        "qty": 1
+      },
+      {
+        "id": "leg-fr",
+        "name": "Leg - Front Right",
+        "material": "Pine",
+        "thickness": 50,
+        "length": 439,
+        "width": 50,
+        "qty": 1
+      },
+      {
+        "id": "leg-bl",
+        "name": "Leg - Back Left",
+        "material": "Pine",
+        "thickness": 50,
+        "length": 439,
+        "width": 50,
+        "qty": 1
+      },
+      {
+        "id": "leg-br",
+        "name": "Leg - Back Right",
+        "material": "Pine",
+        "thickness": 50,
+        "length": 439,
+        "width": 50,
+        "qty": 1
+      },
+      {
+        "id": "apron-f",
+        "name": "Apron - Front",
+        "material": "Pine",
+        "thickness": 18,
+        "length": 510,
+        "width": 80,
+        "qty": 1
+      },
+      {
+        "id": "apron-b",
+        "name": "Apron - Back",
+        "material": "Pine",
+        "thickness": 18,
+        "length": 510,
+        "width": 80,
+        "qty": 1
+      },
+      {
+        "id": "apron-l",
+        "name": "Apron - Left",
+        "material": "Pine",
+        "thickness": 18,
+        "length": 510,
+        "width": 80,
+        "qty": 1
+      },
+      {
+        "id": "apron-r",
+        "name": "Apron - Right",
+        "material": "Pine",
+        "thickness": 18,
+        "length": 510,
+        "width": 80,
+        "qty": 1
+      }
     ],
     "joins": [
-      { "type":"MORTISE_TENON","hostPartId":"leg-fl","hostEdge":"E","insertPartId":"apron-f","width":80,"depth":20,"fit":"standard","mt":{"tenonThickness":6,"tenonLength":18,"shoulder":3,"haunch":0} },
-      { "type":"MORTISE_TENON","hostPartId":"leg-fr","hostEdge":"W","insertPartId":"apron-f","width":80,"depth":20,"fit":"standard","mt":{"tenonThickness":6,"tenonLength":18,"shoulder":3,"haunch":0} },
-      { "type":"MORTISE_TENON","hostPartId":"leg-bl","hostEdge":"E","insertPartId":"apron-b","width":80,"depth":20,"fit":"standard","mt":{"tenonThickness":6,"tenonLength":18,"shoulder":3,"haunch":0} },
-      { "type":"MORTISE_TENON","hostPartId":"leg-br","hostEdge":"W","insertPartId":"apron-b","width":80,"depth":20,"fit":"standard","mt":{"tenonThickness":6,"tenonLength":18,"shoulder":3,"haunch":0} },
-      { "type":"MORTISE_TENON","hostPartId":"leg-fl","hostEdge":"N","insertPartId":"apron-l","width":80,"depth":20,"fit":"standard","mt":{"tenonThickness":6,"tenonLength":18,"shoulder":3,"haunch":0} },
-      { "type":"MORTISE_TENON","hostPartId":"leg-bl","hostEdge":"S","insertPartId":"apron-l","width":80,"depth":20,"fit":"standard","mt":{"tenonThickness":6,"tenonLength":18,"shoulder":3,"haunch":0} },
-      { "type":"MORTISE_TENON","hostPartId":"leg-fr","hostEdge":"N","insertPartId":"apron-r","width":80,"depth":20,"fit":"standard","mt":{"tenonThickness":6,"tenonLength":18,"shoulder":3,"haunch":0} },
-      { "type":"MORTISE_TENON","hostPartId":"leg-br","hostEdge":"S","insertPartId":"apron-r","width":80,"depth":20,"fit":"standard","mt":{"tenonThickness":6,"tenonLength":18,"shoulder":3,"haunch":0} }
+      {
+        "type": "MORTISE_TENON",
+        "hostPartId": "leg-fl",
+        "hostEdge": "E",
+        "insertPartId": "apron-f",
+        "width": 80,
+        "depth": 20,
+        "fit": "standard",
+        "mt": {
+          "tenonThickness": 6,
+          "tenonLength": 18,
+          "shoulder": 3,
+          "haunch": 0
+        }
+      },
+      {
+        "type": "MORTISE_TENON",
+        "hostPartId": "leg-fr",
+        "hostEdge": "W",
+        "insertPartId": "apron-f",
+        "width": 80,
+        "depth": 20,
+        "fit": "standard",
+        "mt": {
+          "tenonThickness": 6,
+          "tenonLength": 18,
+          "shoulder": 3,
+          "haunch": 0
+        }
+      },
+      {
+        "type": "MORTISE_TENON",
+        "hostPartId": "leg-bl",
+        "hostEdge": "E",
+        "insertPartId": "apron-b",
+        "width": 80,
+        "depth": 20,
+        "fit": "standard",
+        "mt": {
+          "tenonThickness": 6,
+          "tenonLength": 18,
+          "shoulder": 3,
+          "haunch": 0
+        }
+      },
+      {
+        "type": "MORTISE_TENON",
+        "hostPartId": "leg-br",
+        "hostEdge": "W",
+        "insertPartId": "apron-b",
+        "width": 80,
+        "depth": 20,
+        "fit": "standard",
+        "mt": {
+          "tenonThickness": 6,
+          "tenonLength": 18,
+          "shoulder": 3,
+          "haunch": 0
+        }
+      },
+      {
+        "type": "MORTISE_TENON",
+        "hostPartId": "leg-fl",
+        "hostEdge": "N",
+        "insertPartId": "apron-l",
+        "width": 80,
+        "depth": 20,
+        "fit": "standard",
+        "mt": {
+          "tenonThickness": 6,
+          "tenonLength": 18,
+          "shoulder": 3,
+          "haunch": 0
+        }
+      },
+      {
+        "type": "MORTISE_TENON",
+        "hostPartId": "leg-bl",
+        "hostEdge": "S",
+        "insertPartId": "apron-l",
+        "width": 80,
+        "depth": 20,
+        "fit": "standard",
+        "mt": {
+          "tenonThickness": 6,
+          "tenonLength": 18,
+          "shoulder": 3,
+          "haunch": 0
+        }
+      },
+      {
+        "type": "MORTISE_TENON",
+        "hostPartId": "leg-fr",
+        "hostEdge": "N",
+        "insertPartId": "apron-r",
+        "width": 80,
+        "depth": 20,
+        "fit": "standard",
+        "mt": {
+          "tenonThickness": 6,
+          "tenonLength": 18,
+          "shoulder": 3,
+          "haunch": 0
+        }
+      },
+      {
+        "type": "MORTISE_TENON",
+        "hostPartId": "leg-br",
+        "hostEdge": "S",
+        "insertPartId": "apron-r",
+        "width": 80,
+        "depth": 20,
+        "fit": "standard",
+        "mt": {
+          "tenonThickness": 6,
+          "tenonLength": 18,
+          "shoulder": 3,
+          "haunch": 0
+        }
+      }
     ]
+  },
+  "_debug": {
+    "fallback": true
   }
 }

@@ -1,0 +1,1 @@
+{"spec":{"units":"mm","assembly":{"overall":{"W":610,"D":610,"H":457}}},"plateUrls":["http://localhost:3001/api/export/joint/rabbet?title=1&w=900&font=18&spec=%7B...%7D"],"jobs":[],"tooling":{"endmillDiameter":6.35,"stepdown":2,"stepover":0.5,"feedXY":900,"feedZ":300,"safeZ":8}}

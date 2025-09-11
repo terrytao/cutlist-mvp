@@ -1,0 +1,119 @@
+## TREE (src, 4 levels)
+src/.DS_Store
+src/app/.DS_Store
+src/app/api/.DS_Store
+src/app/api/analyze-image/route.ts
+src/app/api/export/.DS_Store
+src/app/api/generate/route.ts
+src/app/api/images/route.ts
+src/app/api/joinery-images/route.ts
+src/app/api/spec-from-image/route.ts
+src/app/api/spec/route.ts
+src/app/dev/oneclick/page.tsx
+src/app/dev/plates/page.tsx
+src/app/dev/spec-to-pic/page.tsx
+src/app/dev/three-preview/page.tsx
+src/app/favicon.ico
+src/app/globals.css
+src/app/layout.tsx
+src/app/page.tsx
+src/app/page.tsx.bak
+src/components/FurniturePreview3D.tsx
+src/components/FurniturePreview3DPro.tsx
+src/components/JoineryHero.tsx
+src/components/JoineryPicture.tsx
+src/components/PlatePreview.tsx
+src/lib/allowances.ts
+src/lib/cam.ts
+src/lib/compute.ts
+src/lib/joinery-geom.ts
+src/lib/plate-schema.ts
+src/lib/plateUrl.ts
+src/lib/plates-from-joins.ts
+src/lib/prod-schema.ts
+src/lib/providers.ts
+src/lib/redis.ts
+src/lib/schema.ts
+src/lib/spec-normalize.ts
+src/lib/trial.ts
+
+## package.json
+{
+  "name": "cutlist-mvp",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev -p 3001",
+    "build": "next build --turbopack",
+    "start": "next start",
+    "lint": "eslint"
+  },
+  "dependencies": {
+    "@react-three/drei": "^10.7.5",
+    "@react-three/fiber": "^9.3.0",
+    "@upstash/redis": "^1.35.3",
+    "jszip": "^3.10.1",
+    "next": "15.5.0",
+    "openai": "^5.20.0",
+    "react": "19.1.0",
+    "react-dom": "19.1.0",
+    "stripe": "^18.4.0",
+    "three": "^0.180.0",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "^3",
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "15.5.0",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  }
+}
+
+## tsconfig.json
+{
+  "compilerOptions": {
+    "target": "ES2017",
+    "lib": [
+      "dom",
+      "dom.iterable",
+      "esnext"
+    ],
+    "allowJs": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "jsx": "preserve",
+    "incremental": true,
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ],
+    "paths": {
+      "@/*": [
+        "./src/*"
+      ]
+    }
+  },
+  "include": [
+    "next-env.d.ts",
+    "**/*.ts",
+    "**/*.tsx",
+    ".next/types/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "backups",
+    "backups/**"
+  ]
+}
