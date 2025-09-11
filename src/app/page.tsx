@@ -1,5 +1,6 @@
 "use client";
 import { useMemo, useRef, useState, useEffect } from "react";
+import Link from "next/link";
 
 /* Types */
 type GenResp = { images: string[]; usedPrompt?: string };
@@ -37,6 +38,14 @@ function Section({title,desc,children}:{title:string;desc?:string;children:any})
 
 /* Page */
 export default function Home() {
+  const isDev = process.env.NODE_ENV !== "production";
+  const env = process.env.NODE_ENV || "development";
+  const envLabel = env.toUpperCase();
+  const envBadgeClass = env === "production"
+    ? "bg-red-50 border-red-200 text-red-700"
+    : env === "test"
+      ? "bg-indigo-50 border-indigo-200 text-indigo-700"
+      : "bg-blue-50 border-blue-200 text-blue-700";
   // Flow
   const [basePrompt, setBasePrompt] = useState('Square end table, Shaker/Arts&Crafts style. 24"W x 24"D x 16"H. Mortise & tenon.');
   const [refineText, setRefineText] = useState("");
@@ -208,11 +217,20 @@ export default function Home() {
             <p className="text-xs text-gray-500">Prompt → 3 concepts → refine → finalize → cut list + SVG</p>
           </div>
           <div className="ml-auto flex items-center gap-2">
+            <span className={`inline-flex items-center gap-2 px-2 py-1 rounded-md border text-xs ${envBadgeClass}`}>
+              <span className="hidden sm:inline">Env:</span>
+              <span>{envLabel}</span>
+            </span>
             <span className={`inline-flex items-center gap-2 px-2 py-1 rounded-md border text-xs ${badgeClass}`} title="We cover a small preview budget so you can try. Final export is paid.">
               <span className="hidden sm:inline">Free preview left:</span>
               <span>${remainingDollars ?? "—"} / ${capDollars ?? "—"}</span>
               <button onClick={refreshTrial} className="underline decoration-dotted text-xs">refresh</button>
             </span>
+            {isDev && (
+              <Link href="/dev" className="text-xs underline decoration-dotted">
+                Dev
+              </Link>
+            )}
           </div>
         </div>
       </header>
