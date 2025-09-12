@@ -1,7 +1,7 @@
 'use client';
 
 import * as THREE from 'three';
-import React, { useMemo, useEffect, useState } from 'react';
+import React, { useMemo, useEffect, useState, Suspense } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
 import { EffectComposer, Bloom, Vignette } from '@react-three/postprocessing';
@@ -52,8 +52,17 @@ function useWoodMaterial(_wood?: WoodTex, fallbackColor = '#D6C4A9', rough = 0.5
 
 function Model({ spec, woodTop, woodLeg, palette }: { spec: Spec; woodTop?: WoodTex; woodLeg?: WoodTex; palette?: { top?: string; leg?: string; apron?: string; slat?: string } }) {
   const { W, D, H } = toMM(spec);
-  const Wm = mmToMeters(W), Dm = mmToMeters(D), Hm = mmToMeters(H);
-  const { topThk, legThk, apronH, apronDrop, isBench, slats, slatT, gap } = derive(spec, Wm, Dm, Hm);
+  const safe = (n: number, def: number) => (Number.isFinite(n) && n > 0 ? n : def);
+  const Wm = safe(mmToMeters(W), 0.6), Dm = safe(mmToMeters(D), 0.6), Hm = safe(mmToMeters(H), 0.45);
+  const params = derive(spec, Wm, Dm, Hm);
+  const topThk = safe(params.topThk, 0.02);
+  const legThk = safe(params.legThk, 0.05);
+  const apronH  = safe(params.apronH, 0.09);
+  const apronDrop = safe(params.apronDrop, 0.10);
+  const isBench = params.isBench;
+  const slatCount = Number.isFinite(params.slats) ? Math.max(0, Math.floor(params.slats as number)) : 0;
+  const slatT = safe(params.slatT, 0.018);
+  const gap = safe(params.gap, 0.006);
 
   const matTop = useWoodMaterial(woodTop, palette?.top || '#DCC9A6', 0.45);
   const matLeg = useWoodMaterial(woodLeg, palette?.leg || '#CFBEA2', 0.6);
@@ -83,10 +92,10 @@ function Model({ spec, woodTop, woodLeg, palette }: { spec: Spec; woodTop?: Wood
       </mesh>
 
       {/* Optional bench slats */}
-      {isBench && slats > 0 && (
+      {isBench && slatCount > 0 && (
         <group>
-          {Array.from({ length: slats }).map((_, i) => {
-            const total = slats * slatT + (slats - 1) * gap;
+          {Array.from({ length: slatCount }).map((_, i) => {
+            const total = slatCount * slatT + (slatCount - 1) * gap;
             const startY = (Dm - total) / 2 + slatT / 2;
             const y = startY + i * (slatT + gap);
             return (
@@ -124,12 +133,16 @@ function Model({ spec, woodTop, woodLeg, palette }: { spec: Spec; woodTop?: Wood
 
 export default function FurniturePreview3DPro({ spec, woodTop, woodLeg, enableEffects = true, palette, onError }: { spec: Spec; woodTop?: WoodTex; woodLeg?: WoodTex; enableEffects?: boolean; palette?: { top?: string; leg?: string; apron?: string; slat?: string }; onError?: () => void }) {
   const [mounted, setMounted] = useState(false);
-  const [ready, setReady] = useState(false);
+  const [canvasKey, setCanvasKey] = useState(0);
+  const [effectsOn, setEffectsOn] = useState(enableEffects);
   useEffect(() => { setMounted(true); }, []);
-  useEffect(() => { if (mounted) requestAnimationFrame(() => setReady(true)); }, [mounted]);
+  useEffect(() => { setEffectsOn(enableEffects); }, [enableEffects]);
   const { W, D, H } = toMM(spec);
-  const validDims = [W, D, H].every(v => Number.isFinite(v) && v > 0);
-  if (!mounted || !ready) return null;
+  const validDims = [W, D, H].every(v => typeof v === 'number' && Number.isFinite(v) && v > 0);
+  // Remount Canvas when spec dimensions/type change to ensure a clean GL context
+  const specKey = `${W}|${D}|${H}|${spec.assembly.type||''}`;
+  useEffect(() => { setCanvasKey(k => k + 1); }, [specKey]);
+  if (!mounted) return null;
   if (!validDims) return <div style={{ padding: 12, fontSize: 12, color: '#666' }}>Invalid dimensions in spec</div>;
   const Wm = mmToMeters(W), Dm = mmToMeters(D);
   // WebGL availability guard
@@ -141,36 +154,41 @@ export default function FurniturePreview3DPro({ spec, woodTop, woodLeg, enableEf
     Math.max(1.4, Math.max(Wm, Dm) * 1.1)
   ];
 
+  const handleError = () => { setEffectsOn(false); setCanvasKey(k => k + 1); if (onError) onError(); };
+
   return (
     <div data-3d style={{ border: '1px solid #eee', borderRadius: 12, padding: 12 }}>
       {/* <SnapshotButton /> */}
-      <ErrorBoundary onError={onError}>
+      <ErrorBoundary onError={handleError}>
       <Canvas
+        key={canvasKey}
         gl={{ antialias: true }}
         camera={{ position: camPos, fov: 35 }}
         dpr={1}
         style={{ width: '100%', height: 440, borderRadius: 10 }}
       >
-        {/* Background & simple lights (robust) */}
-        <color attach="background" args={['#FFFFFF']} />
-        <ambientLight intensity={0.5} />
-        <directionalLight position={[3,3,4]} intensity={0.8} />
+        <Suspense fallback={null}>
+          {/* Background & simple lights (robust) */}
+          <color attach="background" args={['#FFFFFF']} />
+          <ambientLight intensity={0.5} />
+          <directionalLight position={[3,3,4]} intensity={0.8} />
 
-        {/* Main model */}
-        <group castShadow receiveShadow>
-          <Model spec={spec} woodTop={woodTop} woodLeg={woodLeg} palette={palette} />
-        </group>
+          {/* Main model */}
+          <group castShadow receiveShadow>
+            <Model spec={spec} woodTop={woodTop} woodLeg={woodLeg} palette={palette} />
+          </group>
 
-        {/* Controls */}
-        <OrbitControls enablePan={false} enableDamping dampingFactor={0.08} />
+          {/* Controls */}
+          <OrbitControls enablePan={false} enableDamping dampingFactor={0.08} />
 
-        {/* Postprocessing for nicer highlights and edges */}
-        {enableEffects && (
-          <EffectComposer enableNormalPass={false}>
-            <Bloom intensity={0.22} luminanceThreshold={0.2} luminanceSmoothing={0.3} />
-            <Vignette eskil offset={0.1} darkness={0.9} />
-          </EffectComposer>
-        )}
+          {/* Postprocessing for nicer highlights and edges */}
+          {effectsOn && (
+            <EffectComposer enableNormalPass={false}>
+              <Bloom intensity={0.22} luminanceThreshold={0.2} luminanceSmoothing={0.3} />
+              <Vignette eskil offset={0.1} darkness={0.9} />
+            </EffectComposer>
+          )}
+        </Suspense>
       </Canvas>
       </ErrorBoundary>
     </div>
