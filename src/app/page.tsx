@@ -7,6 +7,10 @@ const FurniturePreview3DPro = dynamic(() => import("@/components/FurniturePrevie
   ssr: false,
   loading: () => <div className="text-xs text-gray-500">Loading furniture preview…</div>
 });
+const FurniturePreview3D = dynamic(() => import("@/components/FurniturePreview3D"), {
+  ssr: false,
+  loading: () => <div className="text-xs text-gray-500">Loading furniture preview…</div>
+});
 const FurniturePreview3DCSG = dynamic(() => import("@/components/FurniturePreview3DCSG"), {
   ssr: false,
   loading: () => <div className="text-xs text-gray-500">Loading joinery preview…</div>
@@ -191,7 +195,9 @@ export default function Home() {
   // Trial badge + entitlement
   const [trial, setTrial] = useState<TrialStatus | null>(null);
   const [entitled, setEntitled] = useState(false);
-  const [effects, setEffects] = useState(true);
+  const [effects, setEffects] = useState(false); // default off for stability
+  const [usePro, setUsePro] = useState(false);   // Pro (photo) renderer toggle
+  const [safeMode, setSafeMode] = useState(true); // Safe mode: force basic renderer
 
   const refreshTrial = async () => {
     try {
@@ -246,6 +252,8 @@ export default function Home() {
       if (!res.ok) throw new Error((data as any)?.error || "Spec generation failed");
       setProdSpec(data.spec);
       setPlateDefs(toPlatePreviews(data.spec));
+      // In safe mode, prefer the stable basic preview and disable effects
+      if (safeMode) { setUsePro(false); setEffects(false); }
     } catch (e: any) {
       setError(e.message);
     } finally {
@@ -439,7 +447,13 @@ export default function Home() {
             ) : null; })()}
             <div className="mb-3 flex items-center gap-4 text-xs text-gray-600 dark:text-gray-300">
               <label className="flex items-center gap-2">
-                <input type="checkbox" checked={effects} onChange={(e)=>setEffects(e.target.checked)} /> Effects
+                <input type="checkbox" checked={safeMode} onChange={(e)=>{ setSafeMode(e.target.checked); if (e.target.checked) { setUsePro(false); setEffects(false); } }} /> Safe mode
+              </label>
+              <label className="flex items-center gap-2">
+                <input type="checkbox" checked={usePro && !safeMode} onChange={(e)=>setUsePro(e.target.checked)} disabled={safeMode} /> Photo preview (beta)
+              </label>
+              <label className="flex items-center gap-2">
+                <input type="checkbox" checked={effects} onChange={(e)=>setEffects(e.target.checked)} disabled={safeMode || !usePro} /> Effects
               </label>
               <label className="flex items-center gap-2">
                 Species:
@@ -472,9 +486,14 @@ export default function Home() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               <Card className="p-4">
                 <div className="text-sm text-gray-600 dark:text-gray-300 mb-2">Furniture preview</div>
-                {isClient && (() => { const pv = toPreviewSpec(prodSpec); return isValidPreviewSpec(pv) ? (
-                  <FurniturePreview3DPro spec={pv!} enableEffects={effects} palette={paletteBySpecies[species]} onError={()=>{/* disable effects on error */ setEffects(false); }} />
-                ) : (<div className="text-xs text-gray-500">Waiting for valid spec…</div>); })()}
+                {isClient && (() => { const pv = toPreviewSpec(prodSpec); if (!isValidPreviewSpec(pv)) return (<div className="text-xs text-gray-500">Waiting for valid spec…</div>);
+                  const wantPro = usePro && !safeMode;
+                  return wantPro ? (
+                    <FurniturePreview3DPro spec={pv!} enableEffects={effects} palette={paletteBySpecies[species]} onError={()=>{ setEffects(false); }} />
+                  ) : (
+                    <FurniturePreview3D spec={pv!} enableEffects={false} />
+                  );
+                })()}
               </Card>
               <Card className="p-4">
                 <div className="text-sm text-gray-600 dark:text-gray-300 mb-2">Joinery preview</div>
