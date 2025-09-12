@@ -140,7 +140,7 @@ function SnapshotButton() {
   );
 }
 
-export default function FurniturePreview3D({ spec }:{ spec: Spec }) {
+export default function FurniturePreview3D({ spec, enableEffects = true }:{ spec: Spec; enableEffects?: boolean }) {
   const { Wm, Dm } = useDimsMeters(spec);
   // frame that fits the model in view
   const camPos:[number,number,number] = [ Math.max(1.2, Wm*0.8), Math.max(1.0, Dm*0.8), Math.max(1.2, Math.max(Wm,Dm)*0.9) ];
@@ -178,11 +178,13 @@ export default function FurniturePreview3D({ spec }:{ spec: Spec }) {
         <OrbitControls enablePan={false} />
 
         {/* Postprocessing for subtle polish */}
-        <EffectComposer disableNormalPass>
-          <SMAA />
-          <Bloom intensity={0.2} mipmapBlur luminanceThreshold={0.22} luminanceSmoothing={0.35} />
-          <Vignette eskil offset={0.12} darkness={0.9} />
-        </EffectComposer>
+        {enableEffects && (
+          <EffectComposer disableNormalPass>
+            <SMAA />
+            <Bloom intensity={0.2} mipmapBlur luminanceThreshold={0.22} luminanceSmoothing={0.35} />
+            <Vignette eskil offset={0.12} darkness={0.9} />
+          </EffectComposer>
+        )}
       </Canvas>
     </div>
   );

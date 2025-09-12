@@ -160,7 +160,7 @@ function SnapshotButton() {
   );
 }
 
-export default function FurniturePreview3DPro({ spec, woodTop, woodLeg }: { spec: Spec; woodTop?: WoodTex; woodLeg?: WoodTex }) {
+export default function FurniturePreview3DPro({ spec, woodTop, woodLeg, enableEffects = true }: { spec: Spec; woodTop?: WoodTex; woodLeg?: WoodTex; enableEffects?: boolean }) {
   const { W, D } = toMM(spec);
   const Wm = mmToMeters(W), Dm = mmToMeters(D);
   const camPos: [number, number, number] = [
@@ -206,11 +206,13 @@ export default function FurniturePreview3DPro({ spec, woodTop, woodLeg }: { spec
         <OrbitControls enablePan={false} enableDamping dampingFactor={0.08} />
 
         {/* Postprocessing for nicer highlights and edges */}
-        <EffectComposer disableNormalPass>
-          <SMAA />
-          <Bloom intensity={0.25} mipmapBlur luminanceThreshold={0.2} luminanceSmoothing={0.3} />
-          <Vignette eskil offset={0.1} darkness={0.9} />
-        </EffectComposer>
+        {enableEffects && (
+          <EffectComposer disableNormalPass>
+            <SMAA />
+            <Bloom intensity={0.25} mipmapBlur luminanceThreshold={0.2} luminanceSmoothing={0.3} />
+            <Vignette eskil offset={0.1} darkness={0.9} />
+          </EffectComposer>
+        )}
       </Canvas>
     </div>
   );

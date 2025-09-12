@@ -69,6 +69,7 @@ export default function Page() {
   const [specObj, setSpecObj] = useState<any | null>(null);
   const [joinsObj, setJoinsObj] = useState<any[] | null>(null);
   const [showPro, setShowPro] = useState(false);
+  const [effects, setEffects] = useState(true);
 
   const onRender = () => {
     setError(null);
@@ -156,6 +157,9 @@ export default function Page() {
             Dados/Groove
           </button>
         </div>
+        <label className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-300">
+          <input type="checkbox" checked={effects} onChange={(e)=>setEffects(e.target.checked)} /> Effects
+        </label>
       </div>
 
       {specObj && joinsObj && (
@@ -164,7 +168,7 @@ export default function Page() {
             Tip: Use mouse to rotate/zoom. Click “Download PNG” above the canvas to save a snapshot.
           </div>
           <FurniturePreview3DCSG spec={specObj} joins={joinsObj} />
-          {showPro && <FurniturePreview3DPro spec={specObj} />}
+          {showPro && <FurniturePreview3DPro spec={specObj} enableEffects={effects} />}
         </section>
       )}
     </main>

@@ -36,6 +36,7 @@ export default function ThreePreviewPage() {
   const [text, setText] = useState(JSON.stringify(example, null, 2));
   const [spec, setSpec] = useState<any | null>(null);
   const [err, setErr] = useState<string>('');
+  const [effects, setEffects] = useState(true);
 
   const onRender = () => {
     setErr('');
@@ -96,6 +97,9 @@ export default function ThreePreviewPage() {
                 Bench
               </button>
             </div>
+            <label className="ml-auto flex items-center gap-2 text-xs text-gray-600 dark:text-gray-300">
+              <input type="checkbox" checked={effects} onChange={(e)=>setEffects(e.target.checked)} /> Effects
+            </label>
             {err && <span className="text-sm text-red-600">{err}</span>}
           </div>
         </section>
@@ -103,7 +107,7 @@ export default function ThreePreviewPage() {
         {spec && (
           <section className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4">
             <div className="mb-2 text-sm text-gray-600 dark:text-gray-300">Interactive — rotate/zoom; use the Download PNG button above canvas.</div>
-            <FurniturePreview3DPro spec={spec} />
+            <FurniturePreview3DPro spec={spec} enableEffects={effects} />
           </section>
         )}
       </div>
