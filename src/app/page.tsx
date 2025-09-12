@@ -208,10 +208,10 @@ export default function Home() {
     : "bg-amber-50 border-amber-200 text-amber-700";
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-black text-gray-900 dark:text-gray-100">
+    <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white dark:from-black dark:to-gray-950 text-gray-900 dark:text-gray-100">
       <header className="sticky top-0 z-10 backdrop-blur border-b border-gray-200/60 dark:border-gray-800/60 bg-white/70 dark:bg-black/60">
         <div className="max-w-6xl mx-auto px-4 py-3 flex items-center gap-3">
-          <div className="h-8 w-8 rounded-lg bg-black dark:bg-white" />
+          <div className="h-8 w-8 rounded-xl bg-gradient-to-br from-sky-500 to-indigo-600 ring-2 ring-white/60 dark:ring-white/10 shadow-sm" />
           <div>
             <h1 className="text-base font-bold">Cut-List Builder</h1>
             <p className="text-xs text-gray-500">Prompt → 3 concepts → refine → finalize → cut list + SVG</p>
@@ -236,6 +236,22 @@ export default function Home() {
       </header>
 
       <main className="max-w-6xl mx-auto px-4 py-6 space-y-6">
+        {/* Hero callout */}
+        <div className="relative overflow-hidden rounded-2xl border border-sky-100/70 dark:border-sky-900/40 bg-gradient-to-br from-sky-50 to-indigo-50 dark:from-sky-950/30 dark:to-indigo-950/30 p-5 sm:p-6">
+          <div className="flex flex-col md:flex-row items-start md:items-center gap-4">
+            <div className="flex-1">
+              <div className="text-sm font-semibold text-sky-700 dark:text-sky-300">Design fast, cut accurately</div>
+              <h2 className="text-xl sm:text-2xl font-semibold mt-1">From prompt to joinery and cut list</h2>
+              <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">
+                Generate concepts, refine them visually, then export deterministic SVG and G-code — no external tools needed.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Btn onClick={generateBase}>Start with 1 concept</Btn>
+              <a href="/dev" className="text-sm underline decoration-dotted text-gray-600 dark:text-gray-300">Dev tools</a>
+            </div>
+          </div>
+        </div>
         {/* Step 1 */}
         <Section title="1) Describe your table" desc="Enter a base prompt and generate 3 concept images.">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">

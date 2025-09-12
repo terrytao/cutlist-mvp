@@ -119,10 +119,14 @@ function ModelCSG({ spec, joins }:{ spec: Spec; joins: Join[] }) {
 
   // Positions
   topMesh.position.set(Wm/2, Dm/2, Hm - topThk/2);
-  legMeshes[0].position.set(...(legsPos['leg-fl']));
-  legMeshes[1].position.set(...(legsPos['leg-fr']));
-  legMeshes[2].position.set(...(legsPos['leg-br']));
-  legMeshes[3].position.set(...(legsPos['leg-bl']));
+  const lfl = legsPos['leg-fl'] as [number,number,number];
+  const lfr = legsPos['leg-fr'] as [number,number,number];
+  const lbr = legsPos['leg-br'] as [number,number,number];
+  const lbl = legsPos['leg-bl'] as [number,number,number];
+  legMeshes[0].position.set(lfl[0], lfl[1], lfl[2]);
+  legMeshes[1].position.set(lfr[0], lfr[1], lfr[2]);
+  legMeshes[2].position.set(lbr[0], lbr[1], lbr[2]);
+  legMeshes[3].position.set(lbl[0], lbl[1], lbl[2]);
 
  
 
@@ -164,7 +168,6 @@ export default function FurniturePreview3DCSG({ spec, joins }:{ spec:Spec; joins
           gl.toneMappingExposure = 1.0;
           // @ts-expect-error three types: outputColorSpace differs across versions
           gl.outputColorSpace = THREE.SRGBColorSpace;
-          gl.physicallyCorrectLights = true;
         }}
         dpr={[1,2]} style={{ width:'100%', height:460, borderRadius:10, touchAction:'none', cursor:'grab' }}
       >
