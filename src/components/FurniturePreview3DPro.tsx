@@ -1,16 +1,10 @@
 'use client';
 
 import * as THREE from 'three';
-import React, { useMemo } from 'react';
+import React, { useMemo, useEffect, useState } from 'react';
 import { Canvas } from '@react-three/fiber';
-import {
-  Environment,
-  OrbitControls,
-  RoundedBox,
-  AccumulativeShadows,
-  RandomizedLight,
-} from '@react-three/drei';
-import { EffectComposer, Bloom, Vignette, SMAA } from '@react-three/postprocessing';
+import { OrbitControls } from '@react-three/drei';
+import { EffectComposer, Bloom, Vignette } from '@react-three/postprocessing';
 
 type Units = 'mm'|'in';
 type Spec = {
@@ -56,15 +50,15 @@ function useWoodMaterial(_wood?: WoodTex, fallbackColor = '#D6C4A9', rough = 0.5
   }, [fallbackColor, rough]);
 }
 
-function Model({ spec, woodTop, woodLeg }: { spec: Spec; woodTop?: WoodTex; woodLeg?: WoodTex }) {
+function Model({ spec, woodTop, woodLeg, palette }: { spec: Spec; woodTop?: WoodTex; woodLeg?: WoodTex; palette?: { top?: string; leg?: string; apron?: string; slat?: string } }) {
   const { W, D, H } = toMM(spec);
   const Wm = mmToMeters(W), Dm = mmToMeters(D), Hm = mmToMeters(H);
   const { topThk, legThk, apronH, apronDrop, isBench, slats, slatT, gap } = derive(spec, Wm, Dm, Hm);
 
-  const matTop = useWoodMaterial(woodTop, '#DCC9A6', 0.45);
-  const matLeg = useWoodMaterial(woodLeg, '#CFBEA2', 0.6);
-  const matApr = useWoodMaterial(woodLeg, '#D0BEA1', 0.58);
-  const matSlat = useWoodMaterial(woodTop, '#E2D5BD', 0.45);
+  const matTop = useWoodMaterial(woodTop, palette?.top || '#DCC9A6', 0.45);
+  const matLeg = useWoodMaterial(woodLeg, palette?.leg || '#CFBEA2', 0.6);
+  const matApr = useWoodMaterial(woodLeg, palette?.apron || '#D0BEA1', 0.58);
+  const matSlat = useWoodMaterial(woodTop, palette?.slat || '#E2D5BD', 0.45);
 
   // Top
   const topPos: [number, number, number] = [Wm / 2, Dm / 2, Hm - topThk / 2];
@@ -82,10 +76,11 @@ function Model({ spec, woodTop, woodLeg }: { spec: Spec; woodTop?: WoodTex; wood
 
   return (
     <group>
-      {/* Top with rounded edges */}
-      <RoundedBox args={[Wm, Dm, topThk]} radius={Math.min(0.02, topThk * 0.3)} smoothness={4} castShadow receiveShadow position={topPos}>
+      {/* Top */}
+      <mesh position={topPos} castShadow receiveShadow>
+        <boxGeometry args={[Wm, Dm, topThk]} />
         <primitive object={matTop} attach="material" />
-      </RoundedBox>
+      </mesh>
 
       {/* Optional bench slats */}
       {isBench && slats > 0 && (
@@ -95,17 +90,10 @@ function Model({ spec, woodTop, woodLeg }: { spec: Spec; woodTop?: WoodTex; wood
             const startY = (Dm - total) / 2 + slatT / 2;
             const y = startY + i * (slatT + gap);
             return (
-              <RoundedBox
-                key={i}
-                args={[Wm - 2 * legThk, slatT, slatT]}
-                radius={Math.min(0.006, slatT * 0.3)}
-                smoothness={3}
-                castShadow
-                receiveShadow
-                position={[Wm / 2, y, Hm - topThk - 0.006]}
-              >
+              <mesh key={i} position={[Wm / 2, y, Hm - topThk - 0.006]} castShadow receiveShadow>
+                <boxGeometry args={[Wm - 2 * legThk, slatT, slatT]} />
                 <primitive object={matSlat} attach="material" />
-              </RoundedBox>
+              </mesh>
             );
           })}
         </group>
@@ -113,56 +101,40 @@ function Model({ spec, woodTop, woodLeg }: { spec: Spec; woodTop?: WoodTex; wood
 
       {/* Legs */}
       {legPositions.map((p, i) => (
-        <RoundedBox key={i} args={[legThk, legThk, Hm - topThk]} radius={Math.min(0.01, legThk * 0.2)} smoothness={3} castShadow receiveShadow position={p}>
+        <mesh key={i} position={p} castShadow receiveShadow>
+          <boxGeometry args={[legThk, legThk, Hm - topThk]} />
           <primitive object={matLeg} attach="material" />
-        </RoundedBox>
+        </mesh>
       ))}
 
-      {/* Aprons: front & right (simple model) */}
-      <RoundedBox
-        args={[Wm - 2 * legThk, legThk, apronH]}
-        radius={Math.min(0.008, legThk * 0.2)}
-        smoothness={3}
-        castShadow
-        receiveShadow
-        position={[Wm / 2, legThk / 2, apronZ]}
-      >
+      {/* Aprons: front & right */}
+      <mesh position={[Wm / 2, legThk / 2, apronZ]} castShadow receiveShadow>
+        <boxGeometry args={[Wm - 2 * legThk, legThk, apronH]} />
         <primitive object={matApr} attach="material" />
-      </RoundedBox>
-
-      <RoundedBox
-        args={[legThk, Dm - 2 * legThk, apronH]}
-        radius={Math.min(0.008, legThk * 0.2)}
-        smoothness={3}
-        castShadow
-        receiveShadow
-        position={[Wm - legThk / 2, Dm / 2, apronZ]}
-      >
+      </mesh>
+      <mesh position={[Wm - legThk / 2, Dm / 2, apronZ]} castShadow receiveShadow>
+        <boxGeometry args={[legThk, Dm - 2 * legThk, apronH]} />
         <primitive object={matApr} attach="material" />
-      </RoundedBox>
+      </mesh>
     </group>
   );
 }
 
-function SnapshotButton() {
-  const onClick = () => {
-    const canvas = document.querySelector('canvas[data-3d="true"]') as HTMLCanvasElement | null;
-    if (!canvas) return;
-    const a = document.createElement('a');
-    a.href = canvas.toDataURL('image/png');
-    a.download = 'preview.png';
-    a.click();
-  };
-  return (
-    <button onClick={onClick} style={{ marginBottom: 8, padding: '8px 12px', border: '1px solid #ccc', borderRadius: 8 }}>
-      Download PNG
-    </button>
-  );
-}
+// Snapshot button removed to avoid unused warning; see FurniturePreview3D for PNG download.
 
-export default function FurniturePreview3DPro({ spec, woodTop, woodLeg, enableEffects = true }: { spec: Spec; woodTop?: WoodTex; woodLeg?: WoodTex; enableEffects?: boolean }) {
-  const { W, D } = toMM(spec);
+export default function FurniturePreview3DPro({ spec, woodTop, woodLeg, enableEffects = true, palette, onError }: { spec: Spec; woodTop?: WoodTex; woodLeg?: WoodTex; enableEffects?: boolean; palette?: { top?: string; leg?: string; apron?: string; slat?: string }; onError?: () => void }) {
+  const [mounted, setMounted] = useState(false);
+  const [ready, setReady] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
+  useEffect(() => { if (mounted) requestAnimationFrame(() => setReady(true)); }, [mounted]);
+  const { W, D, H } = toMM(spec);
+  const validDims = [W, D, H].every(v => Number.isFinite(v) && v > 0);
+  if (!mounted || !ready) return null;
+  if (!validDims) return <div style={{ padding: 12, fontSize: 12, color: '#666' }}>Invalid dimensions in spec</div>;
   const Wm = mmToMeters(W), Dm = mmToMeters(D);
+  // WebGL availability guard
+  const webglOK = (() => { try { const c=document.createElement('canvas'); return !!(c.getContext('webgl')||c.getContext('experimental-webgl')); } catch { return false; } })();
+  if (!webglOK) return <div style={{ padding: 12, fontSize: 12, color: '#666' }}>WebGL not available in this browser.</div>;
   const camPos: [number, number, number] = [
     Math.max(1.4, Wm * 0.9),
     Math.max(1.1, Dm * 0.9),
@@ -170,36 +142,23 @@ export default function FurniturePreview3DPro({ spec, woodTop, woodLeg, enableEf
   ];
 
   return (
-    <div style={{ border: '1px solid #eee', borderRadius: 12, padding: 12 }}>
-      <SnapshotButton />
+    <div data-3d style={{ border: '1px solid #eee', borderRadius: 12, padding: 12 }}>
+      {/* <SnapshotButton /> */}
+      <ErrorBoundary onError={onError}>
       <Canvas
-        data-3d
-        shadows
-        gl={{ antialias: true, preserveDrawingBuffer: true }}
+        gl={{ antialias: true }}
         camera={{ position: camPos, fov: 35 }}
-        onCreated={({ gl }) => {
-          gl.toneMapping = THREE.ACESFilmicToneMapping;
-          gl.toneMappingExposure = 1.0;
-          // @ts-expect-error three types: outputColorSpace differs across versions
-          gl.outputColorSpace = THREE.SRGBColorSpace;
-          gl.physicallyCorrectLights = true;
-        }}
-        dpr={[1, 2]}
-        style={{ width: '100%', height: 460, borderRadius: 10 }}
+        dpr={1}
+        style={{ width: '100%', height: 440, borderRadius: 10 }}
       >
-        {/* Background & HDRI */}
-        <color attach="background" args={['#F7FAFC']} />
-        <Environment preset="apartment" />
-
-        {/* Soft global shadow accumulation */}
-        <AccumulativeShadows frames={80} temporal alphaTest={0.9} scale={10} color="black" opacity={0.6} position={[0, 0, 0]}>
-          <RandomizedLight amount={8} radius={1} intensity={0.9} ambient={0.4} position={[2, 3, 3]} />
-          <RandomizedLight amount={6} radius={1.5} intensity={0.4} ambient={0.2} position={[-3, 2, 1]} />
-        </AccumulativeShadows>
+        {/* Background & simple lights (robust) */}
+        <color attach="background" args={['#FFFFFF']} />
+        <ambientLight intensity={0.5} />
+        <directionalLight position={[3,3,4]} intensity={0.8} />
 
         {/* Main model */}
         <group castShadow receiveShadow>
-          <Model spec={spec} woodTop={woodTop} woodLeg={woodLeg} />
+          <Model spec={spec} woodTop={woodTop} woodLeg={woodLeg} palette={palette} />
         </group>
 
         {/* Controls */}
@@ -207,13 +166,19 @@ export default function FurniturePreview3DPro({ spec, woodTop, woodLeg, enableEf
 
         {/* Postprocessing for nicer highlights and edges */}
         {enableEffects && (
-          <EffectComposer disableNormalPass>
-            <SMAA />
-            <Bloom intensity={0.25} mipmapBlur luminanceThreshold={0.2} luminanceSmoothing={0.3} />
+          <EffectComposer enableNormalPass={false}>
+            <Bloom intensity={0.22} luminanceThreshold={0.2} luminanceSmoothing={0.3} />
             <Vignette eskil offset={0.1} darkness={0.9} />
           </EffectComposer>
         )}
       </Canvas>
+      </ErrorBoundary>
     </div>
   );
+}
+class ErrorBoundary extends React.Component<{ children: React.ReactNode; onError?: () => void }, { hasError: boolean }> {
+  constructor(props: { children: React.ReactNode; onError?: () => void }){ super(props); this.state = { hasError:false }; }
+  static getDerivedStateFromError(){ return { hasError:true }; }
+  componentDidCatch(){ if (this.props.onError) this.props.onError(); }
+  render(){ if (this.state.hasError) return <div style={{ padding:12, fontSize:12, color:'#b00020' }}>Preview failed to render.</div>; return this.props.children; }
 }

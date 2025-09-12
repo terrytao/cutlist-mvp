@@ -55,11 +55,14 @@ export function jobsToGcode(req: CamRequest): string {
     lines.push("", `(---- ${job.type} : ${job.label ?? job.host.name} ----)`);
     if (job.type === "RABBET") {
       const { width: hostW, length: hostL } = job.host;
-      const r = rabbetRect(job.edge, hostW, hostL, job.width)!;
-      lines.push(...pocketRectGcode(r.x, r.y, r.w, r.h, job.depth, req.tooling), "M5");
+      const edge: EdgeId = (job.edge ?? "N");
+      const w = job.width ?? 0;
+      const d = job.depth ?? 0;
+      const r = rabbetRect(edge, hostW, hostL, w)!;
+      lines.push(...pocketRectGcode(r.x, r.y, r.w, r.h, d, req.tooling), "M5");
     } else if (job.type === "DADO" || job.type === "GROOVE") {
       const { width: hostW, length: hostL } = job.host;
-      const w = job.width, d = job.depth, off = job.offset;
+      const w = job.width ?? 0, d = job.depth ?? 0, off = job.offset ?? 0;
       if (job.type === "GROOVE" && Math.abs(w - req.tooling.endmillDiameter) < 1e-3) {
         if (job.axis === "X") lines.push(...slotLineGcode(0, off, hostW, off, d, req.tooling));
         else lines.push(...slotLineGcode(off, 0, off, hostL, d, req.tooling));

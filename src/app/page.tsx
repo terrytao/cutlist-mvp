@@ -2,6 +2,19 @@
 import { useMemo, useRef, useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
+import dynamic from "next/dynamic";
+const FurniturePreview3DPro = dynamic(() => import("@/components/FurniturePreview3DPro"), {
+  ssr: false,
+  loading: () => <div className="text-xs text-gray-500">Loading furniture preview…</div>
+});
+const FurniturePreview3DCSG = dynamic(() => import("@/components/FurniturePreview3DCSG"), {
+  ssr: false,
+  loading: () => <div className="text-xs text-gray-500">Loading joinery preview…</div>
+});
+import PlatePreview from "@/components/PlatePreview";
+import { buildPlateUrl } from "@/lib/plateUrl";
+import { jobsFromProductionSpec } from "@/lib/jobs-from-joins";
+import { platesFromProductionSpec } from "@/lib/plates-from-joins";
 
 /* Types */
 type GenResp = { images: string[]; usedPrompt?: string };
@@ -39,6 +52,8 @@ function Section({title,desc,children}:{title:string;desc?:string;children:any})
 
 /* Page */
 export default function Home() {
+  const [isClient, setIsClient] = useState(false);
+  useEffect(()=> setIsClient(true), []);
   const isDev = process.env.NODE_ENV !== "production";
   const env = process.env.NODE_ENV || "development";
   const envLabel = env.toUpperCase();
@@ -70,15 +85,113 @@ export default function Home() {
   const [spec, setSpec] = useState<any>(null);
   const [showSvg, setShowSvg] = useState(false);
   const [svgNonce, setSvgNonce] = useState(0);
+  // Production spec (structured) from LLM
+  const [prodSpec, setProdSpec] = useState<any | null>(null);
+  const [plateDefs, setPlateDefs] = useState<any[] | null>(null);
+  const [species, setSpecies] = useState<'pine'|'maple'|'oak'|'walnut'|'plywood'>('maple');
+  const [provider, setProvider] = useState<'homeDepot'|'boardFoot'|'serpApi'>('homeDepot');
+  const [vendorSubtotal, setVendorSubtotal] = useState<number|null>(null);
+  const [vendorName, setVendorName] = useState<string|null>(null);
+  const [vendorLines, setVendorLines] = useState<any[]|null>(null);
+  const [quoteLoading, setQuoteLoading] = useState(false);
+  const [refineTextHome, setRefineTextHome] = useState('');
+  const pricePerBF: Record<'pine'|'maple'|'oak'|'walnut'|'plywood', number> = { pine: 5, maple: 8, oak: 9, walnut: 14, plywood: 6 };
+  const paletteBySpecies: Record<typeof species, { top: string; leg: string; apron: string; slat: string }> = {
+    pine:   { top: '#E8D9B5', leg: '#DFC79A', apron: '#E2CFA6', slat: '#F1E4C8' },
+    maple:  { top: '#DCC9A6', leg: '#CFBEA2', apron: '#D0BEA1', slat: '#E2D5BD' },
+    oak:    { top: '#C9B38A', leg: '#BFA77E', apron: '#C5AE82', slat: '#D6C6A3' },
+    walnut: { top: '#8E6B53', leg: '#7A5B46', apron: '#80614C', slat: '#A3856F' },
+    plywood:{ top: '#D8CCB4', leg: '#C9BC9D', apron: '#D0C4A8', slat: '#E5DAC3' },
+  };
+  function mmToIn(mm:number){ return mm/25.4; }
+  function estimateCostFromSpec(ps:any){
+    if (!ps?.cutlist) return 0;
+    const pbfMap = pricePerBF;
+    let total = 0;
+    for (const p of ps.cutlist) {
+      const mat = String(p.material||'').toLowerCase();
+      const sp = mat.includes('ply') ? 'plywood' : species;
+      const bf = (mmToIn(p.thickness)*mmToIn(p.width)*mmToIn(p.length))/144;
+      total += bf * (pbfMap[sp]||8) * (p.qty||1);
+    }
+    return total;
+  }
   const svgUrl = useMemo(() => {
     if (!spec || !showSvg) return null;
     const encoded = encodeURIComponent(JSON.stringify(spec));
     return `/api/export/svg?spec=${encoded}&w=1200&joins=1&labelbg=1&fsmin=9&fsmax=12&t=${svgNonce}`;
   }, [spec, showSvg, svgNonce]);
 
+  // Convert ProductionSpec -> simple preview spec
+  function toPreviewSpec(ps: any) {
+    if (!ps) return null;
+    const units = (ps.units === "in" || ps.units === "mm") ? ps.units : "mm";
+    const o = ps.overall || ps.assembly?.overall || {};
+    const W = Number(o.W) || 600, D = Number(o.D) || 600, H = Number(o.H) || 450;
+    const overall = { W, D, H };
+    const type = ps.metadata?.type || ps.assembly?.type || "project";
+    return { units, assembly: { type, overall } };
+  }
+
+  function isValidPreviewSpec(s: any) {
+    try {
+      if (!s?.assembly?.overall) return false;
+      const { W, D, H } = s.assembly.overall;
+      return [W, D, H].every((v: any) => typeof v === 'number' && Number.isFinite(v) && v > 0);
+    } catch { return false; }
+  }
+
+  function toPlatePreviews(ps: any) {
+    try {
+      const pack = platesFromProductionSpec(ps);
+      const units = pack.units || "mm";
+      const items: any[] = [];
+      for (const p of pack.plates) {
+        const host = p.host ? { ...p.host, length: p.host.length ?? 600, width: p.host.width ?? 300 } : undefined;
+        const insert = p.insert ? { ...p.insert } : undefined;
+        if (p.kind === "RABBET") {
+          if (host && insert) items.push({ kind: "rabbet", spec: { units, host, insert, rabbet: p.rabbet } });
+        } else if (p.kind === "DADO") {
+          if (host) items.push({ kind: "dado", spec: { units, host, insert, dado: p.dado } });
+        } else if (p.kind === "GROOVE") {
+          if (host) items.push({ kind: "groove", spec: { units, host, insert, groove: p.groove } });
+        } else if (p.kind === "MORTISE_TENON" && p.mt) {
+          // Show both mortise and tenon plates
+          const w = p.width ?? insert?.width ?? 80;
+          if (host && insert) items.push({ kind: "mortise", spec: { units, host, insert, mt: p.mt, hostEdge: p.hostEdge, width: w } });
+          if (insert) items.push({ kind: "tenon",   spec: { units, insert, mt: p.mt, width: w } });
+        }
+      }
+      return items;
+    } catch {
+      return [];
+    }
+  }
+
+  async function downloadZipFromSpec(ps: any) {
+    try {
+      setError(null);
+      const origin = typeof window !== 'undefined' ? window.location.origin : '';
+      const previews = toPlatePreviews(ps) as Array<{ kind: string; spec: any; }>;
+      const plateUrls = previews.map(pd => origin + buildPlateUrl(pd.kind as any, pd.spec, { title: true, w: 1000, font: 18, host: (pd.spec as any).host?.name, insert: (pd.spec as any).insert?.name }));
+      const tooling = { endmillDiameter: 6.35, stepdown: 2, stepover: 0.5, feedXY: 900, feedZ: 300, safeZ: 8 };
+      const cam = jobsFromProductionSpec(ps);
+      const payload = { spec: ps, units: cam.units, tooling, jobs: cam.jobs, plateUrls, filename: 'cutlist-package' };
+      const res = await fetch('/api/export/package', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      const blob = await res.blob();
+      if (!res.ok) { const t = await blob.text(); throw new Error(t || 'ZIP failed'); }
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob); a.download = 'cutlist-package.zip';
+      document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(a.href);
+    } catch (e: any) {
+      setError(e?.message || 'ZIP failed');
+    }
+  }
+
   // Trial badge + entitlement
   const [trial, setTrial] = useState<TrialStatus | null>(null);
   const [entitled, setEntitled] = useState(false);
+  const [effects, setEffects] = useState(true);
 
   const refreshTrial = async () => {
     try {
@@ -117,6 +230,59 @@ export default function Home() {
       setRounds([{ images: data.images, selected: null, note: "base" }]); setIdx(0);
     } catch (e:any) { setError(e.message); }
     finally { setLoading(null); refreshTrial(); }
+  }
+
+  // One-click: Generate Production Spec and preview (furniture + joinery)
+  async function generateSpecAndPreview() {
+    try {
+      setError(null);
+      setLoading("cutlist");
+      const res = await fetch("/api/spec/production", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: basePrompt })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error((data as any)?.error || "Spec generation failed");
+      setProdSpec(data.spec);
+      setPlateDefs(toPlatePreviews(data.spec));
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setLoading(null);
+    }
+  }
+
+  async function refineSpec() {
+    if (!basePrompt.trim() || !refineTextHome.trim()) return;
+    try {
+      setError(null);
+      setLoading('cutlist');
+      const prompt = `${basePrompt}. ${refineTextHome}`;
+      const res = await fetch('/api/spec/production', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt }) });
+      const data = await res.json();
+      if (!res.ok) throw new Error((data as any)?.error || 'Spec generation failed');
+      setProdSpec(data.spec); setPlateDefs(toPlatePreviews(data.spec)); setRefineTextHome('');
+    } catch (e:any) { setError(e.message); }
+    finally { setLoading(null); }
+  }
+
+  async function getLiveQuoteHome() {
+    if (!prodSpec?.cutlist) return;
+    try {
+      setQuoteLoading(true);
+      const parts = (prodSpec.cutlist as any[]).map(p => {
+        const name: string = p.name || '';
+        const lower = name.toLowerCase();
+        const kind = lower.includes('leg') ? 'leg' : lower.includes('apron') ? 'apron' : lower.includes('top') ? 'top' : 'apron';
+        return { name, kind, length: p.length, width: p.width, thickness: p.thickness, qty: p.qty || 1 };
+      });
+      const body = { parts, species, provider } as any;
+      const r = await fetch('/api/pricing/quote', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      const j = await r.json();
+      if (r.ok) { setVendorSubtotal(j.subtotalUSD); setVendorName(j.vendor); setVendorLines(Array.isArray(j.lines) ? j.lines : null); }
+    } catch {}
+    finally { setQuoteLoading(false); }
   }
 
   async function refineRound() {
@@ -236,23 +402,161 @@ export default function Home() {
       </header>
 
       <main className="max-w-6xl mx-auto px-4 py-6 space-y-6">
-        {/* Hero callout */}
+        {/* Prompt → Spec (ChatGPT) */}
         <div className="relative overflow-hidden rounded-2xl border border-sky-100/70 dark:border-sky-900/40 bg-gradient-to-br from-sky-50 to-indigo-50 dark:from-sky-950/30 dark:to-indigo-950/30 p-5 sm:p-6">
-          <div className="flex flex-col md:flex-row items-start md:items-center gap-4">
-            <div className="flex-1">
-              <div className="text-sm font-semibold text-sky-700 dark:text-sky-300">Design fast, cut accurately</div>
-              <h2 className="text-xl sm:text-2xl font-semibold mt-1">From prompt to joinery and cut list</h2>
-              <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">
-                Generate concepts, refine them visually, then export deterministic SVG and G-code — no external tools needed.
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-              <Btn onClick={generateBase}>Start with 1 concept</Btn>
+          <div className="space-y-3">
+            <div className="text-sm font-semibold text-sky-700 dark:text-sky-300">Prompt → Production Spec</div>
+            <label className="text-xs text-gray-600 dark:text-gray-300">Describe your furniture</label>
+            <textarea
+              rows={3}
+              className="w-full rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-950 px-3 py-2 text-sm focus:ring-2 focus:ring-black dark:focus:ring-white"
+              value={basePrompt}
+              onChange={(e)=>setBasePrompt(e.target.value)}
+              placeholder="e.g., Square end table, 24×24×16 in, Shaker style, mortise & tenon"
+            />
+            <div className="flex items-center gap-3">
+              <Btn onClick={generateSpecAndPreview} disabled={loading!==null}>
+                {loading==="cutlist" ? "Generating…" : "Generate spec + preview"}
+              </Btn>
               <a href="/dev" className="text-sm underline decoration-dotted text-gray-600 dark:text-gray-300">Dev tools</a>
             </div>
           </div>
         </div>
-        {/* Step 1 */}
+
+        {prodSpec && (
+          <Section title="Spec-driven preview" desc="Structured spec from AI, rendered locally (furniture + joinery)">
+            {!isClient && <div className="text-xs text-gray-500">Preparing previews…</div>}
+            {(() => { const pv = toPreviewSpec(prodSpec); const ok = isValidPreviewSpec(pv); return !ok ? (
+              <div className="text-xs text-red-600">Spec missing/invalid dimensions. Try Refine or Generate again.</div>
+            ) : null; })()}
+            <div className="mb-3 flex items-center gap-4 text-xs text-gray-600 dark:text-gray-300">
+              <label className="flex items-center gap-2">
+                <input type="checkbox" checked={effects} onChange={(e)=>setEffects(e.target.checked)} /> Effects
+              </label>
+              <label className="flex items-center gap-2">
+                Species:
+                <select className="rounded border bg-white dark:bg-gray-950 px-2 py-1"
+                  value={species} onChange={(e)=>setSpecies(e.target.value as any)}>
+                  <option value="pine">Pine ($5/bf)</option>
+                  <option value="maple">Maple ($8/bf)</option>
+                  <option value="oak">Oak ($9/bf)</option>
+                  <option value="walnut">Walnut ($14/bf)</option>
+                  <option value="plywood">Plywood ($6/bf)</option>
+                </select>
+              </label>
+              <label className="flex items-center gap-2">
+                Vendor:
+                <select className="rounded border bg-white dark:bg-gray-950 px-2 py-1" value={provider} onChange={(e)=>setProvider(e.target.value as any)}>
+                  <option value="homeDepot">Home Depot (local)</option>
+                  <option value="boardFoot">Board‑foot only</option>
+                  <option value="serpApi">Google Shopping (SerpAPI)</option>
+                </select>
+              </label>
+              <div className="ml-auto flex items-center gap-3">
+                <span>Est. materials: <span className="font-medium">${prodSpec ? estimateCostFromSpec(prodSpec).toFixed(2) : '0.00'}</span></span>
+                <button onClick={getLiveQuoteHome} disabled={!prodSpec || quoteLoading}
+                  className={`px-3 py-1.5 rounded-lg text-xs ${(!prodSpec || quoteLoading) ? 'bg-gray-200 text-gray-500 cursor-not-allowed' : 'bg-black text-white hover:bg-gray-800'}`}>
+                  {quoteLoading ? 'Getting…' : 'Get live quote'}
+                </button>
+                {vendorSubtotal!=null && <span>Vendor ({vendorName}): <span className="font-medium">${vendorSubtotal.toFixed(2)}</span></span>}
+              </div>
+            </div>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <Card className="p-4">
+                <div className="text-sm text-gray-600 dark:text-gray-300 mb-2">Furniture preview</div>
+                {isClient && (() => { const pv = toPreviewSpec(prodSpec); return isValidPreviewSpec(pv) ? (
+                  <FurniturePreview3DPro spec={pv!} enableEffects={effects} palette={paletteBySpecies[species]} onError={()=>{/* disable effects on error */ setEffects(false); }} />
+                ) : (<div className="text-xs text-gray-500">Waiting for valid spec…</div>); })()}
+              </Card>
+              <Card className="p-4">
+                <div className="text-sm text-gray-600 dark:text-gray-300 mb-2">Joinery preview</div>
+                {isClient && (() => { const pv = toPreviewSpec(prodSpec); return isValidPreviewSpec(pv) ? (
+                  <FurniturePreview3DCSG spec={pv!} joins={Array.isArray(prodSpec.joins) ? prodSpec.joins : []} />
+                ) : (<div className="text-xs text-gray-500">Waiting for valid spec…</div>); })()}
+              </Card>
+            </div>
+
+            {/* Parts table */}
+            <div className="mt-4 rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4 overflow-auto">
+              <div className="flex items-center justify-between mb-2">
+                <div className="font-medium">Parts list</div>
+                <div className="text-xs text-gray-500">Units: mm (with in)</div>
+              </div>
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-gray-500">
+                    <th className="py-2">Part</th>
+                    <th className="py-2">Measure</th>
+                    <th className="py-2">Qty</th>
+                    <th className="py-2 text-right">Est. Cost</th>
+                    {vendorLines && <th className="py-2 text-right">Vendor</th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {Array.isArray(prodSpec?.cutlist) && (prodSpec!.cutlist as any[]).map((p:any, i:number) => {
+                    const dims = `${p.length}×${p.width}×${p.thickness} mm (${mmToIn(p.length).toFixed(2)}×${mmToIn(p.width).toFixed(2)}×${mmToIn(p.thickness).toFixed(2)} in)`;
+                    const sp = String(p.material||'').toLowerCase().includes('ply') ? 'plywood' : species;
+                    const bf = (mmToIn(p.thickness)*mmToIn(p.width)*mmToIn(p.length))/144;
+                    const estUnit = bf * (pricePerBF[sp as keyof typeof pricePerBF] || 8);
+                    const estTotal = estUnit * (p.qty||1);
+                    const vLine = vendorLines && vendorLines[i] ? vendorLines[i] : null;
+                    return (
+                      <tr key={i} className="border-t border-gray-100 dark:border-gray-800">
+                        <td className="py-2 pr-2">{p.name}</td>
+                        <td className="py-2 pr-2">{dims}</td>
+                        <td className="py-2 pr-2">{p.qty||1}</td>
+                        <td className="py-2 pl-2 text-right">${estTotal.toFixed(2)}</td>
+                        {vendorLines && <td className="py-2 pl-2 text-right">{vLine ? `$${Number(vLine.vendorTotalUSD||0).toFixed(2)}` : '—'}</td>}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+                <tfoot>
+                  <tr className="border-t border-gray-200 dark:border-gray-700 font-medium">
+                    <td colSpan={3} className="py-2">Totals</td>
+                    <td className="py-2 text-right">${prodSpec ? estimateCostFromSpec(prodSpec).toFixed(2) : '0.00'}</td>
+                    {vendorLines && <td className="py-2 text-right">{vendorSubtotal!=null ? `$${vendorSubtotal.toFixed(2)}` : '—'}</td>}
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+            {/* Refine */}
+            <div className="mt-4">
+              <div className="text-sm text-gray-600 dark:text-gray-300 mb-2">Refine spec</div>
+              <div className="flex flex-col md:flex-row gap-3">
+                <input className="flex-1 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-950 px-3 py-2 text-sm focus:ring-2 focus:ring-black dark:focus:ring-white"
+                  value={refineTextHome} onChange={(e)=>setRefineTextHome(e.target.value)} placeholder="e.g., change to walnut, tapered legs, aprons 70mm" />
+                <Btn variant="ghost" onClick={refineSpec} disabled={loading!==null || !refineTextHome.trim()}>Refine spec</Btn>
+                <Btn variant="soft" onClick={()=>{ setProdSpec(null); setPlateDefs(null); setVendorSubtotal(null); setVendorName(null); }}>Reset</Btn>
+              </div>
+            </div>
+            {plateDefs && plateDefs.length > 0 && (
+              <div className="mt-4">
+                <div className="text-sm text-gray-600 dark:text-gray-300 mb-2">Joinery plates (dimensioned)</div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {plateDefs.slice(0, 6).map((pd, i) => (
+                    <div key={i} className="">
+                      <PlatePreview kind={pd.kind} spec={pd.spec} className="" />
+                      <div className="mt-1 text-xs">
+                         <a href="#"
+                          onClick={(e)=>{ e.preventDefault(); const params = new URLSearchParams(); params.set('title','1'); params.set('w','900'); params.set('font','18'); params.set('spec', JSON.stringify(pd.spec)); const url = `/api/export/joint/${pd.kind}?` + params.toString(); window.open(url, '_blank'); }}
+                          className="underline">Open raw SVG</a>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-3 flex items-center gap-3">
+                  {entitled ? (
+                    <Btn variant="soft" onClick={()=> prodSpec && downloadZipFromSpec(prodSpec)}>Download package (ZIP)</Btn>
+                  ) : (
+                    <Btn variant="ghost" onClick={buyExport} title="Pay once to unlock downloads for this browser.">$6.99 — Buy export</Btn>
+                  )}
+                </div>
+              </div>
+            )}
+          </Section>
+        )}
+        {false && (
         <Section title="1) Describe your table" desc="Enter a base prompt and generate 3 concept images.">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div className="md:col-span-2">
@@ -291,9 +595,9 @@ export default function Home() {
             </div>
           </div>
         </Section>
+        )}
 
-        {/* Step 2 */}
-        {rounds.length > 0 && (
+        {false && rounds.length > 0 && (
           <Section title="2) Pick one concept" desc="Click a card to select. Use ◀ ▶ to review up to 5 kept rounds.">
             <div className="mb-3 flex items-center gap-2">
               <Btn variant="soft" onClick={() => { if (rounds.length>1) setIdx(i => (i - 1 + rounds.length) % rounds.length); }} disabled={rounds.length<=1}>◀ Prev</Btn>
@@ -322,8 +626,7 @@ export default function Home() {
           </Section>
         )}
 
-        {/* Step 3 */}
-        {rounds.length > 0 && (
+        {false && rounds.length > 0 && (
           <Section title="3) Refine" desc="Type extra instructions and get 3 refined images. Repeat; keeps last 5 rounds.">
             <div className="flex flex-col md:flex-row gap-3">
               <input className="flex-1 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-950 px-3 py-2 text-sm focus:ring-2 focus:ring-black dark:focus:ring-white"
@@ -335,8 +638,7 @@ export default function Home() {
           </Section>
         )}
 
-        {/* Step 4 */}
-        {current.selected !== null && (
+        {false && current.selected !== null && (
           <Section title="4) Joinery previews" desc={`Accurate previews for Round ${idx+1}, image ${(current.selected ?? 0)+1}.`}>
             {loadingJoin && <div className="text-sm text-gray-500">Generating joinery views…</div>}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -353,8 +655,7 @@ export default function Home() {
           </Section>
         )}
 
-        {/* Step 5 */}
-        {rounds.length > 0 && (
+        {false && rounds.length > 0 && (
           <Section title="5) Finalize" desc="Generate a cut list from the selected concept, then pay to download your SVG/G-code.">
             <div className="flex items-center gap-2 flex-wrap">
               <Btn onClick={generateCutList} disabled={loading!==null || current.selected===null}>
@@ -409,7 +710,7 @@ export default function Home() {
     <div>
       <iframe
         key={svgNonce}
-        src={svgUrl}
+        src={svgUrl || undefined}
         className="w-full h-[70vh] border-0"
         title="Sheet layout"
       />

@@ -2,10 +2,17 @@
 'use client';
 
 import * as THREE from 'three';
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Canvas } from '@react-three/fiber';
-import { Environment, OrbitControls, AccumulativeShadows, RandomizedLight, RoundedBox } from '@react-three/drei';
+import { OrbitControls } from '@react-three/drei';
 import { CSG } from 'three-csg-ts';
+
+class ErrorBoundary extends React.Component<React.PropsWithChildren<object>, { hasError:boolean }>{
+  constructor(props: React.PropsWithChildren<object>){ super(props); this.state={hasError:false}; }
+  static getDerivedStateFromError(){ return { hasError:true }; }
+  componentDidCatch(){}
+  render(){ if (this.state.hasError) return <div style={{ padding:12, fontSize:12, color:'#b00020' }}>Joinery preview failed to render.</div>; return this.props.children; }
+}
 
 type Units = 'mm'|'in';
 type Spec = { units: Units; assembly: { type: string; overall: { W:number; D:number; H:number } } };
@@ -135,13 +142,15 @@ function ModelCSG({ spec, joins }:{ spec: Spec; joins: Join[] }) {
       <primitive object={topMesh}/>
       {legMeshes.map((m,i)=><primitive key={i} object={m}/>)}
 
-      {/* simple aprons (no cuts) */}
-      <RoundedBox args={[Wm-2*legThk, legThk, apronH]} radius={0.008} smoothness={3} position={[Wm/2, legThk/2, apronZ]}>
+      {/* simple aprons */}
+      <mesh position={[Wm/2, legThk/2, apronZ]}>
+        <boxGeometry args={[Wm-2*legThk, legThk, apronH]} />
         <meshStandardMaterial color="#D0BEA1" roughness={0.58} metalness={0.05}/>
-      </RoundedBox>
-      <RoundedBox args={[legThk, Dm-2*legThk, apronH]} radius={0.008} smoothness={3} position={[Wm - legThk/2, Dm/2, apronZ]}>
+      </mesh>
+      <mesh position={[Wm - legThk/2, Dm/2, apronZ]}>
+        <boxGeometry args={[legThk, Dm-2*legThk, apronH]} />
         <meshStandardMaterial color="#CFBEA2" roughness={0.6} metalness={0.05}/>
-      </RoundedBox>
+      </mesh>
 
       {/* visible tenons */}
       {tenons.map((t,i)=><primitive key={'ten'+i} object={t}/>)}
@@ -149,37 +158,37 @@ function ModelCSG({ spec, joins }:{ spec: Spec; joins: Join[] }) {
   );
 }
 
-function SnapshotButton(){
-  const onClick=()=>{ const c=document.querySelector('canvas[data-3d="true"]') as HTMLCanvasElement|null; if(!c)return; const a=document.createElement('a'); a.href=c.toDataURL('image/png'); a.download='preview-csg.png'; a.click(); };
-  return <button onClick={onClick} style={{marginBottom:8,padding:'8px 12px',border:'1px solid #ccc',borderRadius:8}}>Download PNG</button>;
-}
+// Snapshot button intentionally omitted; use the PNG button on the standard preview.
 
 export default function FurniturePreview3DCSG({ spec, joins }:{ spec:Spec; joins:Join[] }){
-  const { W, D, H } = toMM(spec); const Wm=mm2m(W), Dm=mm2m(D), Hm=mm2m(H);
+  const [mounted, setMounted] = useState(false);
+  const [ready, setReady] = useState(false);
+  useEffect(()=> { setMounted(true); }, []);
+  useEffect(()=> { if (mounted) requestAnimationFrame(()=> setReady(true)); }, [mounted]);
+  const { W, D, H } = toMM(spec);
+  const valid = [W,D,H].every(v => Number.isFinite(v) && v > 0);
+  if (!mounted || !ready) return null;
+  if (!valid) return <div style={{ padding: 12, fontSize: 12, color: '#666' }}>Invalid dimensions in spec</div>;
+  const Wm=mm2m(W), Dm=mm2m(D), Hm=mm2m(H);
+  const webglOK = (() => { try { const c=document.createElement('canvas'); return !!(c.getContext('webgl')||c.getContext('experimental-webgl')); } catch { return false; } })();
+  if (!webglOK) return <div style={{ padding: 12, fontSize: 12, color: '#666' }}>WebGL not available in this browser.</div>;
   const cam:[number,number,number]=[Math.max(1.4,Wm*0.9), Math.max(1.1,Dm*0.9), Math.max(1.4,Math.max(Wm,Dm)*1.1)];
   const target:[number,number,number]=[Wm/2, Dm/2, Hm*0.5];
 
   return (
-    <div style={{border:'1px solid #eee',borderRadius:12,padding:12}}>
-      <SnapshotButton/>
-      <Canvas data-3d shadows gl={{ antialias:true, preserveDrawingBuffer:true }} camera={{ position: cam, fov:35 }}
-        onCreated={({gl})=>{
-          gl.toneMapping = THREE.ACESFilmicToneMapping;
-          gl.toneMappingExposure = 1.0;
-          // @ts-expect-error three types: outputColorSpace differs across versions
-          gl.outputColorSpace = THREE.SRGBColorSpace;
-        }}
-        dpr={[1,2]} style={{ width:'100%', height:460, borderRadius:10, touchAction:'none', cursor:'grab' }}
+    <div data-3d style={{border:'1px solid #eee',borderRadius:12,padding:12}}>
+      {/* <SnapshotButton/> */}
+      <ErrorBoundary>
+      <Canvas gl={{ antialias:true }} camera={{ position: cam, fov:35 }}
+        dpr={1} style={{ width:'100%', height:440, borderRadius:10, touchAction:'none', cursor:'grab' }}
       >
-        <color attach="background" args={['#EFF3F8']} />
-        <Environment preset="city" />
-        <AccumulativeShadows frames={90} temporal alphaTest={0.9} scale={12} color="#000" opacity={0.65} position={[0,0,0]}>
-          <RandomizedLight amount={10} radius={1.3} intensity={1.0} ambient={0.45} position={[2.5,3.5,3.5]} />
-          <RandomizedLight amount={8} radius={1.6} intensity={0.5} ambient={0.2} position={[-3.5,2.0,1.0]} />
-        </AccumulativeShadows>
+        <color attach="background" args={['#FFFFFF']} />
+        <ambientLight intensity={0.5} />
+        <directionalLight position={[3,3,4]} intensity={0.8} />
         <ModelCSG spec={spec} joins={joins}/>
         <OrbitControls makeDefault target={target} enablePan={false} enableDamping dampingFactor={0.08}/>
       </Canvas>
+      </ErrorBoundary>
     </div>
   );
 }

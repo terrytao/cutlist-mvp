@@ -47,3 +47,30 @@ export const SpecSchema = z.object({
 
 export type Spec = z.infer<typeof SpecSchema>;
 export type Part = z.infer<typeof PartSchema>;
+
+// ---- CAM request types (lightweight) ----
+export type Units = 'mm' | 'in';
+export type EdgeId = 'N' | 'S' | 'E' | 'W';
+export type Tooling = {
+  endmillDiameter: number;
+  stepdown: number;
+  stepover: number; // 0..1 as fraction of diameter
+  feedXY: number;
+  feedZ: number;
+  safeZ: number;
+};
+export type CamJob = {
+  type: 'RABBET' | 'DADO' | 'GROOVE';
+  label?: string;
+  host: { name: string; length: number; width: number };
+  edge?: EdgeId;        // for RABBET
+  axis?: 'X' | 'Y';     // for DADO/GROOVE
+  width: number;
+  depth: number;
+  offset?: number;
+};
+export type CamRequest = {
+  units: Units;
+  tooling: Tooling;
+  jobs: CamJob[];
+};

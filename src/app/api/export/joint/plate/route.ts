@@ -1,5 +1,5 @@
 import { mortiseTenonParams } from "@/lib/joinery-geom";
-import type { Spec } from "@/lib/schema";
+import type { ProductionSpecT } from "@/lib/prod-schema";
 
 export const runtime = "nodejs";
 
@@ -48,7 +48,7 @@ export async function GET(req: Request) {
     const offPxQ = Number(url.searchParams.get("off") || "24");   // label offset in px (both dims)
     const showTitle = url.searchParams.get("title") !== "0";
 
-    const spec = JSON.parse(raw) as Spec;
+    const spec = JSON.parse(raw) as ProductionSpecT;
     const g = mortiseTenonParams(spec, host, insert);
     const units = g.units;
     const labelU = (v:number) => `${v}${units === "mm" ? " mm" : " in"}`;

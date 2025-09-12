@@ -1,7 +1,7 @@
 'use client';
 
 import * as THREE from 'three';
-import React, { useMemo } from 'react';
+import React, { useMemo, useEffect, useState } from 'react';
 import { Canvas } from '@react-three/fiber';
 import {
   Environment,
@@ -10,7 +10,7 @@ import {
   RandomizedLight,
   RoundedBox,
 } from '@react-three/drei';
-import { EffectComposer, Bloom, Vignette, SMAA } from '@react-three/postprocessing';
+import { EffectComposer, Bloom, Vignette } from '@react-three/postprocessing';
 
 type Units = 'mm'|'in';
 type Spec = {
@@ -125,7 +125,8 @@ function TableMeshes({ spec }:{ spec: Spec }) {
 function SnapshotButton() {
   // grabs the <canvas> created by R3F and downloads a PNG
   const onClick = () => {
-    const canvas = document.querySelector('canvas[data-3d="true"]') as HTMLCanvasElement | null;
+    // Find the R3F canvas whether the data attribute is on the canvas or its container
+    const canvas = document.querySelector('[data-3d] canvas, canvas[data-3d]') as HTMLCanvasElement | null;
     if (!canvas) return;
     const a = document.createElement('a');
     a.href = canvas.toDataURL('image/png');
@@ -141,9 +142,15 @@ function SnapshotButton() {
 }
 
 export default function FurniturePreview3D({ spec, enableEffects = true }:{ spec: Spec; enableEffects?: boolean }) {
-  const { Wm, Dm } = useDimsMeters(spec);
+  const [mounted, setMounted] = useState(false);
+  useEffect(()=> setMounted(true), []);
+  const { Wm, Dm, Hm } = useDimsMeters(spec);
+  const valid = [Wm, Dm].every(v => Number.isFinite(v) && v > 0);
+  if (!mounted) return null;
+  if (!valid) return <div style={{ padding: 12, fontSize: 12, color: '#666' }}>Invalid dimensions in spec</div>;
   // frame that fits the model in view
   const camPos:[number,number,number] = [ Math.max(1.2, Wm*0.8), Math.max(1.0, Dm*0.8), Math.max(1.2, Math.max(Wm,Dm)*0.9) ];
+  const target:[number,number,number] = [ Wm/2, Dm/2, Hm/2 ];
 
   return (
     <div style={{ border:'1px solid #eee', borderRadius:12, padding:12 }}>
@@ -155,7 +162,6 @@ export default function FurniturePreview3D({ spec, enableEffects = true }:{ spec
         onCreated={({ gl }) => {
           gl.toneMapping = THREE.ACESFilmicToneMapping;
           gl.toneMappingExposure = 1.05;
-          // @ts-expect-error three types: outputColorSpace differs across versions
           gl.outputColorSpace = THREE.SRGBColorSpace;
         }}
         style={{ width: '100%', height: 440, borderRadius: 10 }}
@@ -175,13 +181,12 @@ export default function FurniturePreview3D({ spec, enableEffects = true }:{ spec
         <TableMeshes spec={spec} />
 
         {/* Controls */}
-        <OrbitControls enablePan={false} />
+        <OrbitControls enablePan={false} target={target} />
 
         {/* Postprocessing for subtle polish */}
         {enableEffects && (
-          <EffectComposer disableNormalPass>
-            <SMAA />
-            <Bloom intensity={0.2} mipmapBlur luminanceThreshold={0.22} luminanceSmoothing={0.35} />
+          <EffectComposer enableNormalPass={false}>
+            <Bloom intensity={0.18} luminanceThreshold={0.22} luminanceSmoothing={0.35} />
             <Vignette eskil offset={0.12} darkness={0.9} />
           </EffectComposer>
         )}

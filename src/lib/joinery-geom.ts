@@ -1,75 +1,39 @@
-import type { RabbetSpec, DadoSpec, GrooveSpec, Units } from "./schema";
+import type { Units } from "./schema";
+import type { ProductionSpecT } from "@/lib/prod-schema";
 
-function asNum(n: unknown, name: string) {
-  const v = Number(n);
-  if (!Number.isFinite(v)) throw new Error(`${name} must be a finite number`);
-  return v;
-}
-function assertPos(n: number, name: string) {
-  if (!(n > 0)) throw new Error(`${name} must be > 0`);
-}
-
-export function rabbetParams(spec: RabbetSpec) {
-  const units: Units = (spec.units ?? "mm") as Units;
-  const host = { name: spec.host?.name ?? "Host", thickness: asNum(spec.host?.thickness, "host.thickness") };
-  const insert = { name: spec.insert?.name ?? "Insert", thickness: asNum(spec.insert?.thickness, "insert.thickness") };
-  const width = asNum(spec.rabbet?.width, "rabbet.width");
-  const depth = asNum(spec.rabbet?.depth, "rabbet.depth");
-
-  assertPos(host.thickness, "host.thickness");
-  assertPos(insert.thickness, "insert.thickness");
-  assertPos(width, "rabbet.width");
-  assertPos(depth, "rabbet.depth");
-  if (depth >= host.thickness * 0.8) throw new Error("Rabbet depth too large relative to host thickness");
-
-  return { units, host, insert, rabbet: { width, depth } };
-}
-
-export function dadoParams(spec: DadoSpec) {
-  const units: Units = (spec.units ?? "mm") as Units;
-  const host = {
-    name: spec.host?.name ?? "Host",
-    thickness: asNum(spec.host?.thickness, "host.thickness"),
-    length: spec.host?.length ? asNum(spec.host.length, "host.length") : undefined,
-    width:  spec.host?.width  ? asNum(spec.host.width,  "host.width")  : undefined,
+/** Derive mortise/tenon plate parameters from a production spec and optional host/insert names. */
+export function mortiseTenonParams(spec: ProductionSpecT, hostName?: string, insertName?: string) {
+  const units = (spec.units || 'mm') as Units;
+  const byId = new Map(spec.cutlist.map(p => [p.id, p]));
+  const matches = spec.joins.filter(j => j.type === 'MORTISE_TENON' && j.insertPartId && byId.has(j.hostPartId) && byId.has(j.insertPartId));
+  if (!matches.length) throw new Error('No mortise/tenon join found in spec');
+  let j = matches[0];
+  if (hostName || insertName) {
+    const norm = (s?: string) => (s || '').toLowerCase();
+    const wantH = norm(hostName); const wantI = norm(insertName);
+    const best = matches.find(m => {
+      const h = byId.get(m.hostPartId)!; const i = byId.get(m.insertPartId!)!;
+      const okH = !wantH || norm(h.name).includes(wantH);
+      const okI = !wantI || norm(i.name).includes(wantI);
+      return okH && okI;
+    });
+    if (best) j = best;
+  }
+  const host = byId.get(j.hostPartId)!;
+  const insert = byId.get(j.insertPartId!)!;
+  if (!j.mt) throw new Error('Missing mt fields on mortise/tenon join');
+  const tenon = { thickness: j.mt.tenonThickness, length: j.mt.tenonLength };
+  const mortise = {
+    width: j.width ?? (insert.width ?? 60),
+    height: j.mt.tenonThickness,
+    depth: j.depth ?? j.mt.tenonLength,
   };
-  assertPos(host.thickness, "host.thickness");
-
-  const autoWidth = spec.insert?.thickness ? asNum(spec.insert.thickness, "insert.thickness") : undefined;
-  const width = asNum(spec.dado?.width ?? (autoWidth ?? 0), "dado.width");
-  const depth = asNum(spec.dado?.depth, "dado.depth");
-  const offset = spec.dado?.offset != null ? asNum(spec.dado.offset, "dado.offset") : undefined;
-  const axis = (spec.dado?.axis ?? "X") as "X" | "Y";
-
-  assertPos(width, "dado.width");
-  assertPos(depth, "dado.depth");
-  if (depth >= host.thickness * 0.8) throw new Error("Dado depth too large relative to host thickness");
-
-  return { units, host, insert: spec.insert, dado: { width, depth, offset, axis } };
+  return {
+    units,
+    host: { name: host.name, section: { t: host.thickness } },
+    insert: { name: insert.name },
+    mortise,
+    tenon,
+    hostEdge: j.hostEdge,
+  } as const;
 }
-
-export function grooveParams(spec: GrooveSpec) {
-  const units: Units = (spec.units ?? "mm") as Units;
-  const host = {
-    name: spec.host?.name ?? "Host",
-    thickness: asNum(spec.host?.thickness, "host.thickness"),
-    length: spec.host?.length ? asNum(spec.host.length, "host.length") : undefined,
-    width:  spec.host?.width  ? asNum(spec.host.width,  "host.width")  : undefined,
-  };
-  assertPos(host.thickness, "host.thickness");
-
-  const autoWidth = spec.insert?.thickness ? asNum(spec.insert.thickness, "insert.thickness") : undefined;
-  const width = asNum(spec.groove?.width ?? (autoWidth ?? 0), "groove.width");
-  const depth = asNum(spec.groove?.depth, "groove.depth");
-  const offset = spec.groove?.offset != null ? asNum(spec.groove.offset, "groove.offset") : undefined;
-  const axis = (spec.groove?.axis ?? "X") as "X" | "Y";
-
-  assertPos(width, "groove.width");
-  assertPos(depth, "groove.depth");
-  if (depth >= host.thickness * 0.8) throw new Error("Groove depth too large relative to host thickness");
-
-  return { units, host, insert: spec.insert, groove: { width, depth, offset, axis } };
-}
-
-const JoineryGeom = { rabbetParams, dadoParams, grooveParams };
-export default JoineryGeom;

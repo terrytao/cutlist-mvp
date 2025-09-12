@@ -1,5 +1,5 @@
 import { HOME_DEPOT_VENDOR, type Species } from '@/data/pricing/home-depot';
-import { quoteWithSerpApi } from '@/lib/pricing-external';
+// import { quoteWithSerpApi } from '@/lib/pricing-external';
 
 export type PartKind = 'top' | 'leg' | 'apron';
 export type QuotePart = {
@@ -41,8 +41,10 @@ export function quoteWithHomeDepot(parts: QuotePart[], species: Species): QuoteR
       lines.push({ ...p, vendorUnitUSD: unit, vendorTotalUSD: total, method: 'plywood_sheet_prorated' });
       continue;
     }
+    // plywood handled above via continue; species here excludes 'plywood'
     const bf = (mmToIn(p.thickness) * mmToIn(p.width) * mmToIn(p.length)) / 144;
-    const pbf = HOME_DEPOT_VENDOR.pricePerBF[species === 'plywood' ? 'pine' : species] ?? 8;
+    const key = species as Exclude<Species, 'plywood'>;
+    const pbf = HOME_DEPOT_VENDOR.pricePerBF[key] ?? 8;
     const unit = bf * pbf;
     const total = unit * p.qty;
     lines.push({ ...p, vendorUnitUSD: unit, vendorTotalUSD: total, method: 'board_foot' });
@@ -62,7 +64,8 @@ export function quoteWithBoardFoot(parts: QuotePart[], species: Species, pricePe
   const mmToIn = (mm: number) => mm / 25.4;
   const lines: QuoteLine[] = parts.map((p) => {
     const bf = (mmToIn(p.thickness) * mmToIn(p.width) * mmToIn(p.length)) / 144;
-    const pbf = pricePerBF[species === 'plywood' ? 'pine' : species] ?? 8;
+    const key = (species === 'plywood' ? 'pine' : species) as Exclude<Species, 'plywood'>;
+    const pbf = pricePerBF[key] ?? 8;
     const unit = bf * pbf;
     const total = unit * p.qty;
     return { ...p, vendorUnitUSD: unit, vendorTotalUSD: total, method: 'board_foot' };

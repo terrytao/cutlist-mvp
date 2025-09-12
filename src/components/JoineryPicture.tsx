@@ -23,7 +23,7 @@ function proj(x:number, y:number, z:number, ox:number, oy:number, s:number, k=0.
   const Y = oy - z * s - (k*0.5) * y * s;
   return [X, Y] as const;
 }
-function poly(ctx: CanvasRenderingContext2D, pts: [number,number][]) {
+function poly(ctx: CanvasRenderingContext2D, pts: ReadonlyArray<readonly [number, number]>) {
   ctx.beginPath();
   ctx.moveTo(pts[0][0], pts[0][1]);
   for (let i=1;i<pts.length;i++) ctx.lineTo(pts[i][0], pts[i][1]);

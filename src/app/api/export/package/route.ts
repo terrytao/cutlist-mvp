@@ -56,7 +56,11 @@ export async function POST(req: Request) {
 
     const buf = await zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE", compressionOptions:{ level:6 } });
     const fname = (body.filename || "cutlist-package").toLowerCase().replace(/[^a-z0-9._-]+/g,"-") + ".zip";
-    return new Response(buf, { headers: { "Content-Type":"application/zip", "Content-Disposition":`attachment; filename="${fname}"`, "Cache-Control":"no-store" } });
+    // Convert Node Buffer to ArrayBuffer for Blob compatibility without using SharedArrayBuffer
+    const arr = new Uint8Array(buf.length);
+    arr.set(buf);
+    const blob = new Blob([arr.buffer], { type: 'application/zip' });
+    return new Response(blob, { headers: { "Content-Type":"application/zip", "Content-Disposition":`attachment; filename="${fname}"`, "Cache-Control":"no-store" } });
   } catch (e:any) {
     return new Response("Package error: " + (e?.message ?? String(e)), { status: 400 });
   }
