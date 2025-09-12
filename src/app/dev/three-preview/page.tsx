@@ -73,6 +73,18 @@ export default function ThreePreviewPage() {
       return { ...p, unitCost, totalCost: unitCost * p.qty };
     });
   }
+  const [vendorSubtotal, setVendorSubtotal] = useState<number | null>(null);
+  const [vendorName, setVendorName] = useState<string | null>(null);
+  async function getLiveQuote() {
+    try {
+      if (!spec) return;
+      const parts = computeParts(spec);
+      const body = { parts: parts.map(p => ({ ...p })), species };
+      const r = await fetch('/api/pricing/quote', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      const j = await r.json();
+      if (r.ok) { setVendorSubtotal(j.subtotalUSD); setVendorName(j.vendor); }
+    } catch (_) {}
+  }
   function fmtDims(p:any){
     const Lmm=p.length, Wmm=p.width, Tmm=p.thickness;
     const Lin=mmToIn(Lmm), Win=mmToIn(Wmm), Tin=mmToIn(Tmm);
@@ -208,7 +220,15 @@ export default function ThreePreviewPage() {
                   </tr>
                 </tfoot>
               </table>
-              <div className="mt-2 text-xs text-gray-500">Pricing is approximate using the selected species ($/bf). Live vendor pricing can be integrated later.</div>
+              <div className="mt-3 flex items-center justify-between text-xs text-gray-600 dark:text-gray-300">
+                <span>Pricing uses the selected species ($/bf). Try a local vendor quote:</span>
+                <button onClick={getLiveQuote} className="rounded border px-2 py-1 hover:bg-gray-50 dark:hover:bg-gray-900">Get live quote (local)</button>
+              </div>
+              {vendorSubtotal != null && (
+                <div className="mt-2 text-sm">
+                  Vendor ({vendorName}): <span className="font-medium">${vendorSubtotal.toFixed(2)}</span>
+                </div>
+              )}
             </div>
           </section>
         )}

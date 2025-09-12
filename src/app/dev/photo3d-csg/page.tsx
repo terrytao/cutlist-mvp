@@ -255,7 +255,15 @@ export default function Page() {
                 </tr>
               </tfoot>
             </table>
-            <div className="mt-2 text-xs text-gray-500">Pricing is approximate using the selected species ($/bf). Live vendor pricing can be integrated later.</div>
+              <div className="mt-3 flex items-center justify-between text-xs text-gray-600 dark:text-gray-300">
+                <span>Pricing uses the selected species ($/bf). Try a local vendor quote:</span>
+                <button onClick={getLiveQuote} className="rounded border px-2 py-1 hover:bg-gray-50 dark:hover:bg-gray-900">Get live quote (local)</button>
+              </div>
+              {vendorSubtotal != null && (
+                <div className="mt-2 text-sm">
+                  Vendor ({vendorName}): <span className="font-medium">${vendorSubtotal.toFixed(2)}</span>
+                </div>
+              )}
           </div>
         </section>
       )}

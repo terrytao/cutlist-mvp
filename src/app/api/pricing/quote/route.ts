@@ -1,0 +1,34 @@
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
+import { quoteWithHomeDepot, type QuotePart } from '@/lib/pricing';
+import type { Species } from '@/data/pricing/home-depot';
+
+type Body = { parts: QuotePart[]; species: Species };
+
+export async function POST(req: Request) {
+  try {
+    const body = (await req.json()) as Body;
+    if (!Array.isArray(body?.parts) || !body.parts.length) {
+      return new Response(JSON.stringify({ error: 'parts required' }), { status: 400 });
+    }
+    const species = (body.species || 'maple') as Species;
+    const res = quoteWithHomeDepot(
+      body.parts.map((p) => ({
+        name: String(p.name),
+        kind: (p.kind || 'apron') as QuotePart['kind'],
+        length: Number(p.length) || 0,
+        width: Number(p.width) || 0,
+        thickness: Number(p.thickness) || 0,
+        qty: Math.max(1, Number(p.qty) || 1),
+      })),
+      species,
+    );
+    return new Response(JSON.stringify(res, null, 2), {
+      headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
+    });
+  } catch (e: any) {
+    return new Response(JSON.stringify({ error: e?.message || 'quote failed' }), { status: 400 });
+  }
+}
+
