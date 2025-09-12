@@ -9,7 +9,6 @@ import {
   RoundedBox,
   AccumulativeShadows,
   RandomizedLight,
-  useTexture
 } from '@react-three/drei';
 import { EffectComposer, Bloom, Vignette, SMAA } from '@react-three/postprocessing';
 
@@ -47,37 +46,14 @@ function derive(spec: Spec, Wm:number, Dm:number, Hm:number) {
   return { topThk, legThk, apronH, apronDrop, isBench, slats, slatT, gap };
 }
 
-function useWoodMaterial(wood?: WoodTex, fallbackColor = '#D6C4A9', rough = 0.5) {
-  const maps = useTexture(
-    wood?.map || wood?.roughnessMap || wood?.normalMap
-      ? [wood?.map ?? '', wood?.roughnessMap ?? '', wood?.normalMap ?? '']
-      : []
-  ) as (THREE.Texture | undefined)[];
-
-  // Assign safely
-  const map = maps?.[0]; const rmap = maps?.[1]; const nmap = maps?.[2];
-  [map, rmap, nmap].forEach((t) => {
-    if (t) {
-      t.colorSpace = THREE.SRGBColorSpace;
-      t.wrapS = t.wrapT = THREE.RepeatWrapping;
-      t.anisotropy = 8;
-      t.repeat.set(1, 1);
-    }
-  });
-
-  const mat = useMemo(() => {
-    const m = new THREE.MeshStandardMaterial({
-      color: map ? undefined : new THREE.Color(fallbackColor),
-      map: map,
-      roughnessMap: rmap,
-      normalMap: nmap,
+function useWoodMaterial(_wood?: WoodTex, fallbackColor = '#D6C4A9', rough = 0.5) {
+  return useMemo(() => {
+    return new THREE.MeshStandardMaterial({
+      color: new THREE.Color(fallbackColor),
       roughness: rough,
-      metalness: 0.05
+      metalness: 0.05,
     });
-    return m;
-  }, [map, rmap, nmap, fallbackColor, rough]);
-
-  return mat;
+  }, [fallbackColor, rough]);
 }
 
 function Model({ spec, woodTop, woodLeg }: { spec: Spec; woodTop?: WoodTex; woodLeg?: WoodTex }) {
