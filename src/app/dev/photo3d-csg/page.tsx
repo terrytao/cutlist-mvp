@@ -116,11 +116,12 @@ export default function Page() {
 
   const [vendorSubtotal, setVendorSubtotal] = useState<number | null>(null);
   const [vendorName, setVendorName] = useState<string | null>(null);
+  const [provider, setProvider] = useState<'homeDepot'|'boardFoot'>('homeDepot');
   async function getLiveQuote() {
     try {
       if (!specObj) return;
       const parts = computeParts(specObj);
-      const body = { parts: parts.map(p => ({ ...p })), species };
+      const body = { parts: parts.map(p => ({ ...p })), species, provider };
       const r = await fetch('/api/pricing/quote', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       const j = await r.json();
       if (r.ok) { setVendorSubtotal(j.subtotalUSD); setVendorName(j.vendor); }
