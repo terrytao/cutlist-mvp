@@ -20,36 +20,76 @@ function norm(ps: ProductionSpecT): ProductionSpecT {
   return out;
 }
 
-function fallback(): ProductionSpecT {
-  const W=610,D=610,H=457,top=18,leg=50,apn=18;
-  return {
-    version:"v1", units:"mm",
-    metadata:{type:"coffee_table",title:"Coffee Table 2x2"},
-    overall:{W,D,H},
-    materials:[{name:"Plywood",thickness:18},{name:"Pine",thickness:50}],
-    tolerances:{fitSnug:-0.1,fitStandard:0,fitLoose:0.2},
-    cutlist:[
-      {id:"top",name:"Top",material:"Plywood",thickness:top,length:D,width:W,qty:1},
-      {id:"leg-fl",name:"Leg - Front Left", material:"Pine",thickness:leg,length:H-top,width:leg,qty:1},
-      {id:"leg-fr",name:"Leg - Front Right",material:"Pine",thickness:leg,length:H-top,width:leg,qty:1},
-      {id:"leg-bl",name:"Leg - Back Left",  material:"Pine",thickness:leg,length:H-top,width:leg,qty:1},
-      {id:"leg-br",name:"Leg - Back Right", material:"Pine",thickness:leg,length:H-top,width:leg,qty:1},
-      {id:"apron-f",name:"Apron - Front", material:"Pine",thickness:apn,length:W-2*leg,width:80,qty:1},
-      {id:"apron-b",name:"Apron - Back",  material:"Pine",thickness:apn,length:W-2*leg,width:80,qty:1},
-      {id:"apron-l",name:"Apron - Left",  material:"Pine",thickness:apn,length:D-2*leg,width:80,qty:1},
-      {id:"apron-r",name:"Apron - Right", material:"Pine",thickness:apn,length:D-2*leg,width:80,qty:1}
+function dynamicFallback(prompt?: string): ProductionSpecT {
+  const p = (prompt || '').toLowerCase();
+  // Type guess
+  const type = p.includes('bench') ? 'bench'
+    : p.includes('desk') ? 'desk'
+    : p.includes('nightstand') ? 'nightstand'
+    : p.includes('end table') ? 'end_table'
+    : p.includes('coffee') ? 'coffee_table'
+    : p.includes('table') ? 'table'
+    : 'project';
+
+  // Dimension parsing: try WxDxH first (e.g., 24x12x18 or 24" x 12" x 18")
+  const mmPerIn = 25.4;
+  let Wmm = 610, Dmm = 610, Hmm = 457;
+  const m1 = p.match(/(\d+(?:\.\d+)?)\s*["']?\s*[x×]\s*(\d+(?:\.\d+)?)\s*["']?\s*[x×]\s*(\d+(?:\.\d+)?)/);
+  if (m1) {
+    const W = parseFloat(m1[1]);
+    const D = parseFloat(m1[2]);
+    const H = parseFloat(m1[3]);
+    // assume inches if quotes or if typical inchy sizes
+    const inches = /"|inch|in\b/.test(p) || (W <= 120 && D <= 120 && H <= 120);
+    const k = inches ? mmPerIn : 1;
+    Wmm = Math.round(W * k);
+    Dmm = Math.round(D * k);
+    Hmm = Math.round(H * k);
+  } else {
+    // Try separate mentions like 24w 12d 18h
+    const w2 = p.match(/(\d+(?:\.\d+)?)\s*(?:in|inch|mm)?\s*w\b/);
+    const d2 = p.match(/(\d+(?:\.\d+)?)\s*(?:in|inch|mm)?\s*d\b/);
+    const h2 = p.match(/(\d+(?:\.\d+)?)\s*(?:in|inch|mm)?\s*h\b/);
+    const inches = /"|inch|in\b/.test(p);
+    const k = inches ? mmPerIn : 1;
+    if (w2) Wmm = Math.round(parseFloat(w2[1]) * k);
+    if (d2) Dmm = Math.round(parseFloat(d2[1]) * k);
+    if (h2) Hmm = Math.round(parseFloat(h2[1]) * k);
+  }
+
+  // Basic proportions
+  const top = 18, leg = 50, apn = 18;
+  const apronW = Math.max(70, Math.round(Hmm * 0.18));
+
+  const spec: ProductionSpecT = {
+    version: 'v1', units: 'mm',
+    metadata: { type, title: `${type.replace(/_/g,' ')} (${Wmm}×${Dmm}×${Hmm})` },
+    overall: { W: Wmm, D: Dmm, H: Hmm },
+    materials: [ { name:'Plywood', thickness: top }, { name:'Pine', thickness: leg } ],
+    tolerances: { fitSnug:-0.10, fitStandard:0, fitLoose:0.20 },
+    cutlist: [
+      { id:'top', name:'Top', material:'Plywood', thickness: top, length: Dmm, width: Wmm, qty:1 },
+      { id:'leg-fl', name:'Leg - Front Left',  material:'Pine', thickness: leg, length: Hmm-top, width: leg, qty:1 },
+      { id:'leg-fr', name:'Leg - Front Right', material:'Pine', thickness: leg, length: Hmm-top, width: leg, qty:1 },
+      { id:'leg-bl', name:'Leg - Back Left',   material:'Pine', thickness: leg, length: Hmm-top, width: leg, qty:1 },
+      { id:'leg-br', name:'Leg - Back Right',  material:'Pine', thickness: leg, length: Hmm-top, width: leg, qty:1 },
+      { id:'apron-f', name:'Apron - Front', material:'Pine', thickness: apn, length: Math.max(1, Wmm-2*leg), width: apronW, qty:1 },
+      { id:'apron-b', name:'Apron - Back',  material:'Pine', thickness: apn, length: Math.max(1, Wmm-2*leg), width: apronW, qty:1 },
+      { id:'apron-l', name:'Apron - Left',  material:'Pine', thickness: apn, length: Math.max(1, Dmm-2*leg), width: apronW, qty:1 },
+      { id:'apron-r', name:'Apron - Right', material:'Pine', thickness: apn, length: Math.max(1, Dmm-2*leg), width: apronW, qty:1 },
     ],
-    joins:[
-      {type:"MORTISE_TENON",hostPartId:"leg-fl",hostEdge:"E",insertPartId:"apron-f",width:80,depth:20,fit:"standard",mt:{tenonThickness:6,tenonLength:18,shoulder:3,haunch:0}},
-      {type:"MORTISE_TENON",hostPartId:"leg-fr",hostEdge:"W",insertPartId:"apron-f",width:80,depth:20,fit:"standard",mt:{tenonThickness:6,tenonLength:18,shoulder:3,haunch:0}},
-      {type:"MORTISE_TENON",hostPartId:"leg-bl",hostEdge:"E",insertPartId:"apron-b",width:80,depth:20,fit:"standard",mt:{tenonThickness:6,tenonLength:18,shoulder:3,haunch:0}},
-      {type:"MORTISE_TENON",hostPartId:"leg-br",hostEdge:"W",insertPartId:"apron-b",width:80,depth:20,fit:"standard",mt:{tenonThickness:6,tenonLength:18,shoulder:3,haunch:0}},
-      {type:"MORTISE_TENON",hostPartId:"leg-fl",hostEdge:"N",insertPartId:"apron-l",width:80,depth:20,fit:"standard",mt:{tenonThickness:6,tenonLength:18,shoulder:3,haunch:0}},
-      {type:"MORTISE_TENON",hostPartId:"leg-bl",hostEdge:"S",insertPartId:"apron-l",width:80,depth:20,fit:"standard",mt:{tenonThickness:6,tenonLength:18,shoulder:3,haunch:0}},
-      {type:"MORTISE_TENON",hostPartId:"leg-fr",hostEdge:"N",insertPartId:"apron-r",width:80,depth:20,fit:"standard",mt:{tenonThickness:6,tenonLength:18,shoulder:3,haunch:0}},
-      {type:"MORTISE_TENON",hostPartId:"leg-br",hostEdge:"S",insertPartId:"apron-r",width:80,depth:20,fit:"standard",mt:{tenonThickness:6,tenonLength:18,shoulder:3,haunch:0}}
-    ]
+    joins: [
+      { type:'MORTISE_TENON', hostPartId:'leg-fl', hostEdge:'E', insertPartId:'apron-f', width: apronW, depth: 20, fit:'standard', mt:{ tenonThickness:6, tenonLength:18, shoulder:3, haunch:0 } },
+      { type:'MORTISE_TENON', hostPartId:'leg-fr', hostEdge:'W', insertPartId:'apron-f', width: apronW, depth: 20, fit:'standard', mt:{ tenonThickness:6, tenonLength:18, shoulder:3, haunch:0 } },
+      { type:'MORTISE_TENON', hostPartId:'leg-bl', hostEdge:'E', insertPartId:'apron-b', width: apronW, depth: 20, fit:'standard', mt:{ tenonThickness:6, tenonLength:18, shoulder:3, haunch:0 } },
+      { type:'MORTISE_TENON', hostPartId:'leg-br', hostEdge:'W', insertPartId:'apron-b', width: apronW, depth: 20, fit:'standard', mt:{ tenonThickness:6, tenonLength:18, shoulder:3, haunch:0 } },
+      { type:'MORTISE_TENON', hostPartId:'leg-fl', hostEdge:'N', insertPartId:'apron-l', width: apronW, depth: 20, fit:'standard', mt:{ tenonThickness:6, tenonLength:18, shoulder:3, haunch:0 } },
+      { type:'MORTISE_TENON', hostPartId:'leg-bl', hostEdge:'S', insertPartId:'apron-l', width: apronW, depth: 20, fit:'standard', mt:{ tenonThickness:6, tenonLength:18, shoulder:3, haunch:0 } },
+      { type:'MORTISE_TENON', hostPartId:'leg-fr', hostEdge:'N', insertPartId:'apron-r', width: apronW, depth: 20, fit:'standard', mt:{ tenonThickness:6, tenonLength:18, shoulder:3, haunch:0 } },
+      { type:'MORTISE_TENON', hostPartId:'leg-br', hostEdge:'S', insertPartId:'apron-r', width: apronW, depth: 20, fit:'standard', mt:{ tenonThickness:6, tenonLength:18, shoulder:3, haunch:0 } },
+    ],
   };
+  return spec;
 }
 
 function stripCodeFences(s: string) {
@@ -67,7 +107,7 @@ function extractJsonBlock(s: string): string | null {
 export async function POST(req: Request) {
   try {
     const { prompt, imageUrl, lenient, includeRaw } = await req.json() as { prompt?: string; imageUrl?: string; lenient?: boolean; includeRaw?: boolean };
-    if (process.env.DRY_RUN_LLM === "1") return new Response(JSON.stringify({ spec: norm(fallback()), _debug:{dryRun:true} },null,2),{headers:{'Content-Type':'application/json'}});
+    if (process.env.DRY_RUN_LLM === "1") return new Response(JSON.stringify({ spec: norm(dynamicFallback(prompt)), _debug:{dryRun:true, dynamic:true} },null,2),{headers:{'Content-Type':'application/json','Cache-Control':'no-store'}});
     if (!process.env.OPENAI_API_KEY) return new Response(JSON.stringify({error:"Missing OPENAI_API_KEY"}),{status:500});
     if (!prompt?.trim()) return new Response(JSON.stringify({error:"Missing 'prompt' in body"}),{status:400});
 
@@ -130,8 +170,9 @@ export async function POST(req: Request) {
           } catch {}
         }
         // Fallback with debug context
-        const dbg = { fallback:true, sample: (raw||'').slice(0,200) } as any;
-        const out:any = { spec: norm(fallback()), _debug: dbg };
+        const spec = dynamicFallback(prompt);
+        const dbg = { fallback:true, dynamic:true, sample: (raw||'').slice(0,200) } as any;
+        const out:any = { spec: norm(spec), _debug: dbg };
         if (includeRaw) out._raw = stripCodeFences(raw||'');
         return new Response(JSON.stringify(out,null,2),{headers:{'Content-Type':'application/json','Cache-Control':'no-store'}});
       }
