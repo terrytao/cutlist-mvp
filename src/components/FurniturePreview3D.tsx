@@ -1,8 +1,15 @@
 'use client';
 
+import * as THREE from 'three';
 import React, { useMemo } from 'react';
 import { Canvas } from '@react-three/fiber';
-import { Environment, ContactShadows, OrbitControls } from '@react-three/drei';
+import {
+  Environment,
+  OrbitControls,
+  AccumulativeShadows,
+  RandomizedLight,
+  RoundedBox,
+} from '@react-three/drei';
 
 type Units = 'mm'|'in';
 type Spec = {
@@ -40,8 +47,8 @@ function deriveParams(spec: Spec, Wm:number, Dm:number, Hm:number) {
   return { topThk, legThk, apronH, apronDrop, isBench, slats, slatT, gap };
 }
 
-function Wood({ color="#D6C4A9", rough=0.55 }) {
-  return <meshPhysicalMaterial color={color} roughness={rough} metalness={0} />;
+function Wood({ color="#D6C4A9", rough=0.5 }) {
+  return <meshStandardMaterial color={color} roughness={rough} metalness={0.05} />;
 }
 
 function TableMeshes({ spec }:{ spec: Spec }) {
@@ -73,11 +80,10 @@ function TableMeshes({ spec }:{ spec: Spec }) {
 
   return (
     <group>
-      {/* Top */}
-      <mesh position={topPos}>
-        <boxGeometry args={[Wm, Dm, topThk]} />
-        <Wood color="#DCC9A6" rough={0.5}/>
-      </mesh>
+      {/* Top (rounded) */}
+      <RoundedBox args={[Wm, Dm, topThk]} radius={Math.min(0.02, topThk * 0.3)} smoothness={3} position={topPos}>
+        <Wood color="#DCC9A6" rough={0.45}/>
+      </RoundedBox>
 
       {/* Bench slats (optional) */}
       {isBench && slats > 0 && (
@@ -97,23 +103,20 @@ function TableMeshes({ spec }:{ spec: Spec }) {
         </group>
       )}
 
-      {/* Legs */}
+      {/* Legs (rounded) */}
       {legPositions.map((p,i)=>(
-        <mesh key={i} position={p}>
-          <boxGeometry args={[legThk, legThk, Hm - topThk]} />
-          <Wood color="#CFBEA2" rough={0.6}/>
-        </mesh>
+        <RoundedBox key={i} args={[legThk, legThk, Hm - topThk]} radius={Math.min(0.01, legThk * 0.25)} smoothness={3} position={p}>
+          <Wood color="#CFBEA2" rough={0.55}/>
+        </RoundedBox>
       ))}
 
       {/* Aprons */}
-      <mesh position={frontApron.pos}>
-        <boxGeometry args={frontApron.size} />
-        <Wood color="#D6C4A9" rough={0.58}/>
-      </mesh>
-      <mesh position={rightApron.pos}>
-        <boxGeometry args={rightApron.size} />
-        <Wood color="#D0BEA1" rough={0.6}/>
-      </mesh>
+      <RoundedBox position={frontApron.pos} args={frontApron.size} radius={Math.min(0.008, legThk * 0.2)} smoothness={3}>
+        <Wood color="#D6C4A9" rough={0.5}/>
+      </RoundedBox>
+      <RoundedBox position={rightApron.pos} args={rightApron.size} radius={Math.min(0.008, legThk * 0.2)} smoothness={3}>
+        <Wood color="#D0BEA1" rough={0.52}/>
+      </RoundedBox>
     </group>
   );
 }
@@ -148,21 +151,27 @@ export default function FurniturePreview3D({ spec }:{ spec: Spec }) {
         data-3d
         gl={{ preserveDrawingBuffer: true }}   // enables PNG snapshot
         camera={{ position: camPos, fov: 35 }}
-        style={{ width: '100%', height: 420, borderRadius: 10 }}
+        onCreated={({ gl }) => {
+          gl.toneMapping = THREE.ACESFilmicToneMapping;
+          gl.toneMappingExposure = 1.05;
+          // @ts-expect-error three types: outputColorSpace differs across versions
+          gl.outputColorSpace = THREE.SRGBColorSpace;
+        }}
+        style={{ width: '100%', height: 440, borderRadius: 10 }}
       >
         {/* Background & lighting */}
-        <color attach="background" args={['#F7FAFC']} />
-        <ambientLight intensity={0.5} />
-        <directionalLight position={[3,3,4]} intensity={0.7} />
+        <color attach="background" args={['#F6F9FC']} />
+        <ambientLight intensity={0.45} />
 
-        {/* Studio HDRI (free preset in drei) */}
-        <Environment preset="studio" />
+        {/* Studio HDRI + soft accumulated shadows */}
+        <Environment preset="apartment" />
+        <AccumulativeShadows frames={80} temporal alphaTest={0.95} scale={12} color="#000" opacity={0.6} position={[0,0,0]}>
+          <RandomizedLight amount={8} radius={1.2} intensity={0.9} ambient={0.4} position={[2.5,3.0,3.5]} />
+          <RandomizedLight amount={6} radius={1.6} intensity={0.4} ambient={0.2} position={[-3.0,2.0,1.5]} />
+        </AccumulativeShadows>
 
         {/* Model */}
         <TableMeshes spec={spec} />
-
-        {/* Soft contact shadow under the model */}
-        <ContactShadows position={[0,0,0]} opacity={0.35} blur={2.5} scale={10} far={1.2} />
 
         {/* Controls */}
         <OrbitControls enablePan={false} />
@@ -170,4 +179,3 @@ export default function FurniturePreview3D({ spec }:{ spec: Spec }) {
     </div>
   );
 }
-
