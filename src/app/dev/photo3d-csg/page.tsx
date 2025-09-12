@@ -70,6 +70,49 @@ export default function Page() {
   const [joinsObj, setJoinsObj] = useState<any[] | null>(null);
   const [showPro, setShowPro] = useState(false);
   const [effects, setEffects] = useState(true);
+  const [species, setSpecies] = useState<'pine'|'maple'|'oak'|'walnut'|'plywood'>('maple');
+  const pricePerBF: Record<'pine'|'maple'|'oak'|'walnut'|'plywood', number> = { pine: 5, maple: 8, oak: 9, walnut: 14, plywood: 6 };
+  const mmToIn = (mm: number) => mm / 25.4;
+  const clamp = (v:number, lo:number, hi:number)=> Math.max(lo, Math.min(hi, v));
+  const deriveParamsMM = (spec:any) => {
+    const W = Number(spec?.assembly?.overall?.W||600);
+    const D = Number(spec?.assembly?.overall?.D||600);
+    const H = Number(spec?.assembly?.overall?.H||450);
+    const topThk = clamp(H*0.05, 18, 40);
+    const legThk = clamp(Math.min(W,D)*0.07, 40, 70);
+    const apronH = clamp(H*0.18, 70, 110);
+    return { W, D, H, topThk, legThk, apronH };
+  };
+  const computeParts = (spec:any) => {
+    const { W, D, H, topThk, legThk, apronH } = deriveParamsMM(spec);
+    const parts = [
+      { name: 'Top', length: W, width: D, thickness: topThk, qty: 1, kind:'top' },
+      { name: 'Leg', length: H - topThk, width: legThk, thickness: legThk, qty: 4, kind:'leg' },
+      { name: 'Apron - Front', length: W - 2*legThk, width: apronH, thickness: legThk, qty: 1, kind:'apron' },
+      { name: 'Apron - Back',  length: W - 2*legThk, width: apronH, thickness: legThk, qty: 1, kind:'apron' },
+      { name: 'Apron - Left',  length: D - 2*legThk, width: apronH, thickness: legThk, qty: 1, kind:'apron' },
+      { name: 'Apron - Right', length: D - 2*legThk, width: apronH, thickness: legThk, qty: 1, kind:'apron' },
+    ];
+    return parts.map(p=>({ ...p, length: Math.max(1, Math.round(p.length)), width: Math.max(1, Math.round(p.width)), thickness: Math.max(1, Math.round(p.thickness)) }));
+  };
+  const estimateCostUSD = (parts:any[]) => {
+    const pbf = pricePerBF[species];
+    return parts.map(p=>{
+      const L = mmToIn(p.length), W = mmToIn(p.width), T = mmToIn(p.thickness);
+      const bf = (T*W*L)/144;
+      const unitCost = bf * pbf;
+      return { ...p, unitCost, totalCost: unitCost * p.qty };
+    });
+  };
+  const fmtDims = (p:any) => {
+    const Lmm=p.length, Wmm=p.width, Tmm=p.thickness;
+    const Lin=mmToIn(Lmm), Win=mmToIn(Wmm), Tin=mmToIn(Tmm);
+    return `${Lmm}×${Wmm}×${Tmm} mm (${Lin.toFixed(2)}×${Win.toFixed(2)}×${Tin.toFixed(2)} in)`;
+  };
+  const PartThumb = ({kind}:{kind:'top'|'leg'|'apron'}) => {
+    const fill = kind==='top' ? '#E9E2D3' : kind==='leg' ? '#D7C7AA' : '#E4D7BF';
+    return (<svg width={44} height={28} viewBox="0 0 44 28" className="rounded border border-gray-300 bg-white"><rect x="4" y="6" width="36" height="16" rx="3" fill={fill} stroke="#c7bda8" /></svg>);
+  };
 
   const onRender = () => {
     setError(null);
@@ -158,17 +201,62 @@ export default function Page() {
           </button>
         </div>
         <label className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-300">
+          Species:
+          <select className="rounded border bg-white dark:bg-gray-950 px-2 py-1 text-xs" value={species} onChange={(e)=>setSpecies(e.target.value as any)}>
+            <option value="pine">Pine ($5/bf)</option>
+            <option value="maple">Maple ($8/bf)</option>
+            <option value="oak">Oak ($9/bf)</option>
+            <option value="walnut">Walnut ($14/bf)</option>
+            <option value="plywood">Plywood ($6/bf)</option>
+          </select>
+        </label>
+        <label className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-300">
           <input type="checkbox" checked={effects} onChange={(e)=>setEffects(e.target.checked)} /> Effects
         </label>
       </div>
 
       {specObj && joinsObj && (
-        <section className="space-y-4">
-          <div className="text-sm text-gray-500">
-            Tip: Use mouse to rotate/zoom. Click “Download PNG” above the canvas to save a snapshot.
+        <section className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full">
+          <div className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4">
+            <div className="mb-2 text-sm text-gray-600 dark:text-gray-300">Interactive — rotate/zoom; use the Download PNG button above canvas.</div>
+            <FurniturePreview3DCSG spec={specObj} joins={joinsObj} />
+            {showPro && <div className="mt-3"><FurniturePreview3DPro spec={specObj} enableEffects={effects} /></div>}
           </div>
-          <FurniturePreview3DCSG spec={specObj} joins={joinsObj} />
-          {showPro && <FurniturePreview3DPro spec={specObj} enableEffects={effects} />}
+          <div className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4 overflow-auto">
+            <div className="flex items-center justify-between mb-2">
+              <div className="font-medium">Parts list</div>
+              <div className="text-xs text-gray-500">Units: mm (with in)</div>
+            </div>
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-gray-500">
+                  <th className="py-2">Part</th>
+                  <th className="py-2">Photo</th>
+                  <th className="py-2">Measure</th>
+                  <th className="py-2">Qty</th>
+                  <th className="py-2 text-right">Est. Cost</th>
+                </tr>
+              </thead>
+              <tbody>
+                {estimateCostUSD(computeParts(specObj)).map((p:any, i:number)=> (
+                  <tr key={i} className="border-t border-gray-100 dark:border-gray-800">
+                    <td className="py-2 pr-2">{p.name}</td>
+                    <td className="py-2 pr-2"><PartThumb kind={p.kind} /></td>
+                    <td className="py-2 pr-2">{fmtDims(p)}</td>
+                    <td className="py-2 pr-2">{p.qty}</td>
+                    <td className="py-2 pl-2 text-right">${p.totalCost.toFixed(2)}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="border-t border-gray-200 dark:border-gray-700 font-medium">
+                  <td colSpan={4} className="py-2">Estimated total</td>
+                  <td className="py-2 text-right">${estimateCostUSD(computeParts(specObj)).reduce((s:any,p:any)=>s+p.totalCost,0).toFixed(2)}</td>
+                </tr>
+              </tfoot>
+            </table>
+            <div className="mt-2 text-xs text-gray-500">Pricing is approximate using the selected species ($/bf). Live vendor pricing can be integrated later.</div>
+          </div>
         </section>
       )}
     </main>
