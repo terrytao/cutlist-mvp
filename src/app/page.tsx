@@ -67,7 +67,7 @@ export default function Home() {
       ? "bg-indigo-50 border-indigo-200 text-indigo-700"
       : "bg-blue-50 border-blue-200 text-blue-700";
   // Flow
-  const [basePrompt, setBasePrompt] = useState('Square end table, Shaker/Arts&Crafts style. 24"W x 24"D x 16"H. Mortise & tenon.');
+  const [basePrompt, setBasePrompt] = useState('');
   const [refineText, setRefineText] = useState("");
   const [rounds, setRounds] = useState<Round[]>([]);
   const [idx, setIdx] = useState(0);
