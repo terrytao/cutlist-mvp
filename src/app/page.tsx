@@ -246,7 +246,8 @@ export default function Home() {
       const res = await fetch("/api/spec/production", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: basePrompt })
+        cache: 'no-store',
+        body: JSON.stringify({ prompt: basePrompt, t: Date.now() })
       });
       const data = await res.json();
       if (!res.ok) throw new Error((data as any)?.error || "Spec generation failed");
@@ -267,7 +268,7 @@ export default function Home() {
       setError(null);
       setLoading('cutlist');
       const prompt = `${basePrompt}. ${refineTextHome}`;
-      const res = await fetch('/api/spec/production', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt }) });
+      const res = await fetch('/api/spec/production', { method: 'POST', headers: { 'Content-Type': 'application/json' }, cache: 'no-store', body: JSON.stringify({ prompt, t: Date.now() }) });
       const data = await res.json();
       if (!res.ok) throw new Error((data as any)?.error || 'Spec generation failed');
       setProdSpec(data.spec); setPlateDefs(toPlatePreviews(data.spec)); setRefineTextHome('');
@@ -435,6 +436,13 @@ export default function Home() {
           <Section title="Generated Spec (AI)" desc="Structured specification parsed from your prompt">
             <div className="overflow-auto max-h-[50vh] rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-3">
               <pre className="text-xs leading-5 whitespace-pre-wrap">{JSON.stringify(prodSpec, null, 2)}</pre>
+              {(() => {
+                try {
+                  const dbg = (prodSpec as any)?._debug;
+                  if (!dbg) return null;
+                  return <div className="mt-2 text-xs text-gray-500">Debug: {JSON.stringify(dbg)}</div>;
+                } catch { return null; }
+              })()}
             </div>
           </Section>
         )}
