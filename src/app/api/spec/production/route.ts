@@ -52,9 +52,21 @@ function fallback(): ProductionSpecT {
   };
 }
 
+function stripCodeFences(s: string) {
+  // remove markdown code fences like ```json ... ```
+  return s.replace(/```[a-zA-Z]*\n?/g, '').replace(/```/g, '');
+}
+function extractJsonBlock(s: string): string | null {
+  const txt = stripCodeFences(s);
+  const start = txt.indexOf('{');
+  const end = txt.lastIndexOf('}');
+  if (start >= 0 && end > start) return txt.slice(start, end + 1);
+  return null;
+}
+
 export async function POST(req: Request) {
   try {
-    const { prompt, imageUrl } = await req.json() as { prompt?: string; imageUrl?: string };
+    const { prompt, imageUrl, lenient } = await req.json() as { prompt?: string; imageUrl?: string; lenient?: boolean };
     if (process.env.DRY_RUN_LLM === "1") return new Response(JSON.stringify({ spec: norm(fallback()), _debug:{dryRun:true} },null,2),{headers:{'Content-Type':'application/json'}});
     if (!process.env.OPENAI_API_KEY) return new Response(JSON.stringify({error:"Missing OPENAI_API_KEY"}),{status:500});
     if (!prompt?.trim()) return new Response(JSON.stringify({error:"Missing 'prompt' in body"}),{status:400});
@@ -75,6 +87,16 @@ export async function POST(req: Request) {
       const parsed = ProductionSpec.parse(JSON.parse(raw));
       return new Response(JSON.stringify({ spec: norm(parsed), _debug:{model:(r1 as any).model, usage:r1.usage, pass:1} },null,2),{headers:{'Content-Type':'application/json'}});
     } catch {
+      // Lenient attempt on first pass
+      if (lenient) {
+        try {
+          const block = extractJsonBlock(raw);
+          if (block) {
+            const parsedL = ProductionSpec.parse(JSON.parse(block));
+            return new Response(JSON.stringify({ spec: norm(parsedL), _debug:{model:(r1 as any).model, usage:r1.usage, pass:1, lenient:true} },null,2),{headers:{'Content-Type':'application/json'}});
+          }
+        } catch {}
+      }
       const r2 = await client.chat.completions.create({
         model, temperature:0, max_tokens:2000,
         messages:[
@@ -90,7 +112,18 @@ export async function POST(req: Request) {
         const parsed2 = ProductionSpec.parse(JSON.parse(raw));
         return new Response(JSON.stringify({ spec: norm(parsed2), _debug:{model:(r2 as any).model, usage:r2.usage, pass:2} },null,2),{headers:{'Content-Type':'application/json'}});
       } catch {
-        return new Response(JSON.stringify({ spec: norm(fallback()), _debug:{fallback:true} },null,2),{headers:{'Content-Type':'application/json'}});
+        if (lenient) {
+          try {
+            const block2 = extractJsonBlock(raw);
+            if (block2) {
+              const parsed2L = ProductionSpec.parse(JSON.parse(block2));
+              return new Response(JSON.stringify({ spec: norm(parsed2L), _debug:{model:(r2 as any).model, usage:r2.usage, pass:2, lenient:true} },null,2),{headers:{'Content-Type':'application/json'}});
+            }
+          } catch {}
+        }
+        // Fallback with debug context
+        const dbg = { fallback:true, sample: (raw||'').slice(0,200) };
+        return new Response(JSON.stringify({ spec: norm(fallback()), _debug:dbg },null,2),{headers:{'Content-Type':'application/json'}});
       }
     }
   } catch (e:any) {

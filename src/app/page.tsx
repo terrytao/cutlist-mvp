@@ -73,6 +73,7 @@ export default function Home() {
   const [idx, setIdx] = useState(0);
   const [style, setStyle] = useState("Product render (clean, neutral light)");
   const [imgSize, setImgSize] = useState<"1024x1024"|"1024x1536"|"1536x1024"|"auto">("1024x1024");
+  const [lenientJson, setLenientJson] = useState(true);
   const [units, setUnits] = useState<"in"|"mm">("in");
   const current = rounds[idx] || { images: [], selected: null };
 
@@ -247,7 +248,7 @@ export default function Home() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         cache: 'no-store',
-        body: JSON.stringify({ prompt: basePrompt, t: Date.now() })
+        body: JSON.stringify({ prompt: basePrompt, lenient: lenientJson, t: Date.now() })
       });
       const data = await res.json();
       if (!res.ok) throw new Error((data as any)?.error || "Spec generation failed");
@@ -268,7 +269,7 @@ export default function Home() {
       setError(null);
       setLoading('cutlist');
       const prompt = `${basePrompt}. ${refineTextHome}`;
-      const res = await fetch('/api/spec/production', { method: 'POST', headers: { 'Content-Type': 'application/json' }, cache: 'no-store', body: JSON.stringify({ prompt, t: Date.now() }) });
+      const res = await fetch('/api/spec/production', { method: 'POST', headers: { 'Content-Type': 'application/json' }, cache: 'no-store', body: JSON.stringify({ prompt, lenient: lenientJson, t: Date.now() }) });
       const data = await res.json();
       if (!res.ok) throw new Error((data as any)?.error || 'Spec generation failed');
       setProdSpec(data.spec); setPlateDefs(toPlatePreviews(data.spec)); setRefineTextHome('');
@@ -427,6 +428,9 @@ export default function Home() {
               <Btn onClick={generateSpecAndPreview} disabled={loading!==null}>
                 {loading==="cutlist" ? "Generating…" : "Generate spec + preview"}
               </Btn>
+              <label className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-300">
+                <input type="checkbox" checked={lenientJson} onChange={(e)=>setLenientJson(e.target.checked)} /> Lenient JSON parse
+              </label>
               <a href="/dev" className="text-sm underline decoration-dotted text-gray-600 dark:text-gray-300">Dev tools</a>
             </div>
           </div>
