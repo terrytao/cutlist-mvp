@@ -9,6 +9,7 @@ export default function ProvidersHealthPage() {
       <header className="space-y-1">
         <h1 className="text-2xl font-semibold">Provider Health</h1>
         <p className="text-sm text-gray-500">Quick snapshot of configured LLM/Image providers and flags.</p>
+        <a href="/dev" className="text-xs underline decoration-dotted text-gray-600 dark:text-gray-300">Dev index</a>
       </header>
 
       <section>
@@ -66,4 +67,3 @@ export default function ProvidersHealthPage() {
     </main>
   );
 }
-

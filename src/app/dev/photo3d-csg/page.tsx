@@ -92,6 +92,7 @@ export default function Page() {
         <p className="text-sm text-gray-500">
           Paste a Spec and Joins JSON, then render actual cut geometry. You can rotate/zoom, and use “Download PNG”.
         </p>
+        <a href="/dev" className="text-xs underline decoration-dotted text-gray-600 dark:text-gray-300">Dev index</a>
       </header>
 
       <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
