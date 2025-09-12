@@ -424,6 +424,14 @@ export default function Home() {
         </div>
 
         {prodSpec && (
+          <Section title="Generated Spec (AI)" desc="Structured specification parsed from your prompt">
+            <div className="overflow-auto max-h-[50vh] rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-3">
+              <pre className="text-xs leading-5 whitespace-pre-wrap">{JSON.stringify(prodSpec, null, 2)}</pre>
+            </div>
+          </Section>
+        )}
+
+        {prodSpec && (
           <Section title="Spec-driven preview" desc="Structured spec from AI, rendered locally (furniture + joinery)">
             {!isClient && <div className="text-xs text-gray-500">Preparing previews…</div>}
             {(() => { const pv = toPreviewSpec(prodSpec); const ok = isValidPreviewSpec(pv); return !ok ? (
