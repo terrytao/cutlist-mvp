@@ -56,3 +56,24 @@ export function quoteWithHomeDepot(parts: QuotePart[], species: Species): QuoteR
   };
 }
 
+/** Simple board-foot only vendor, configurable by species map. */
+export function quoteWithBoardFoot(parts: QuotePart[], species: Species, pricePerBF: Record<Exclude<Species, 'plywood'>, number>): QuoteResp {
+  const mmToIn = (mm: number) => mm / 25.4;
+  const lines: QuoteLine[] = parts.map((p) => {
+    const bf = (mmToIn(p.thickness) * mmToIn(p.width) * mmToIn(p.length)) / 144;
+    const pbf = pricePerBF[species === 'plywood' ? 'pine' : species] ?? 8;
+    const unit = bf * pbf;
+    const total = unit * p.qty;
+    return { ...p, vendorUnitUSD: unit, vendorTotalUSD: total, method: 'board_foot' };
+  });
+  const subtotalUSD = lines.reduce((s, x) => s + x.vendorTotalUSD, 0);
+  return { vendor: 'Board-Foot Estimator', currency: 'USD', lines, subtotalUSD, note: 'Pure board-foot estimator by species.' };
+}
+
+export type PricingProvider = 'homeDepot' | 'boardFoot';
+export function quote(parts: QuotePart[], species: Species, provider: PricingProvider = 'homeDepot'): QuoteResp {
+  if (provider === 'boardFoot') {
+    return quoteWithBoardFoot(parts, species, HOME_DEPOT_VENDOR.pricePerBF);
+  }
+  return quoteWithHomeDepot(parts, species);
+}

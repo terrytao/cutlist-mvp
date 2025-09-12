@@ -75,11 +75,12 @@ export default function ThreePreviewPage() {
   }
   const [vendorSubtotal, setVendorSubtotal] = useState<number | null>(null);
   const [vendorName, setVendorName] = useState<string | null>(null);
+  const [provider, setProvider] = useState<'homeDepot'|'boardFoot'>('homeDepot');
   async function getLiveQuote() {
     try {
       if (!spec) return;
       const parts = computeParts(spec);
-      const body = { parts: parts.map(p => ({ ...p })), species };
+      const body = { parts: parts.map(p => ({ ...p })), species, provider };
       const r = await fetch('/api/pricing/quote', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       const j = await r.json();
       if (r.ok) { setVendorSubtotal(j.subtotalUSD); setVendorName(j.vendor); }
@@ -222,7 +223,13 @@ export default function ThreePreviewPage() {
               </table>
               <div className="mt-3 flex items-center justify-between text-xs text-gray-600 dark:text-gray-300">
                 <span>Pricing uses the selected species ($/bf). Try a local vendor quote:</span>
-                <button onClick={getLiveQuote} className="rounded border px-2 py-1 hover:bg-gray-50 dark:hover:bg-gray-900">Get live quote (local)</button>
+                <div className="flex items-center gap-2">
+                  <select className="rounded border bg-white dark:bg-gray-950 px-2 py-1" value={provider} onChange={(e)=>setProvider(e.target.value as any)}>
+                    <option value="homeDepot">Home Depot (local)</option>
+                    <option value="boardFoot">Board‑foot only</option>
+                  </select>
+                  <button onClick={getLiveQuote} className="rounded border px-2 py-1 hover:bg-gray-50 dark:hover:bg-gray-900">Get live quote</button>
+                </div>
               </div>
               {vendorSubtotal != null && (
                 <div className="mt-2 text-sm">

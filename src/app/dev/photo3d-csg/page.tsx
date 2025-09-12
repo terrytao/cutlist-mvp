@@ -270,7 +270,13 @@ export default function Page() {
             </table>
               <div className="mt-3 flex items-center justify-between text-xs text-gray-600 dark:text-gray-300">
                 <span>Pricing uses the selected species ($/bf). Try a local vendor quote:</span>
-                <button onClick={getLiveQuote} className="rounded border px-2 py-1 hover:bg-gray-50 dark:hover:bg-gray-900">Get live quote (local)</button>
+                <div className="flex items-center gap-2">
+                  <select className="rounded border bg-white dark:bg-gray-950 px-2 py-1" value={provider} onChange={(e)=>setProvider(e.target.value as any)}>
+                    <option value="homeDepot">Home Depot (local)</option>
+                    <option value="boardFoot">Board‑foot only</option>
+                  </select>
+                  <button onClick={getLiveQuote} className="rounded border px-2 py-1 hover:bg-gray-50 dark:hover:bg-gray-900">Get live quote</button>
+                </div>
               </div>
               {vendorSubtotal != null && (
                 <div className="mt-2 text-sm">
