@@ -8,7 +8,7 @@ function parsePriceToNumber(s: string | null | undefined): number | null {
 }
 
 function buildQueryForPart(p: QuotePart, species: Species): string {
-  const tIn = (p.thickness / 25.4).toFixed(2);
+  // const tIn = (p.thickness / 25.4).toFixed(2);
   const wIn = (p.width / 25.4).toFixed(2);
   const lIn = Math.max(1, Math.round(p.length / 25.4));
   if (species === 'plywood') {
@@ -34,7 +34,7 @@ export async function quoteWithSerpApi(parts: QuotePart[], species: Species): Pr
     url.searchParams.set('q', q);
     url.searchParams.set('api_key', key);
     const r = await fetch(url.toString(), { cache: 'no-store' });
-    const j: any = await r.json().catch(() => ({}));
+    const j = (await r.json().catch(() => ({}))) as { shopping_results?: Array<{ price?: string }> };
     const first = Array.isArray(j?.shopping_results) ? j.shopping_results[0] : null;
     const price = parsePriceToNumber(first?.price) ?? 0;
     const unit = price;
@@ -50,4 +50,3 @@ export async function quoteWithSerpApi(parts: QuotePart[], species: Species): Pr
     note: 'Prices derived from first Google Shopping result; experimental.',
   };
 }
-
