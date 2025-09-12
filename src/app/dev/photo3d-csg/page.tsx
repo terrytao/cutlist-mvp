@@ -114,6 +114,19 @@ export default function Page() {
     return (<svg width={44} height={28} viewBox="0 0 44 28" className="rounded border border-gray-300 bg-white"><rect x="4" y="6" width="36" height="16" rx="3" fill={fill} stroke="#c7bda8" /></svg>);
   };
 
+  const [vendorSubtotal, setVendorSubtotal] = useState<number | null>(null);
+  const [vendorName, setVendorName] = useState<string | null>(null);
+  async function getLiveQuote() {
+    try {
+      if (!specObj) return;
+      const parts = computeParts(specObj);
+      const body = { parts: parts.map(p => ({ ...p })), species };
+      const r = await fetch('/api/pricing/quote', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      const j = await r.json();
+      if (r.ok) { setVendorSubtotal(j.subtotalUSD); setVendorName(j.vendor); }
+    } catch (_) {}
+  }
+
   const onRender = () => {
     setError(null);
     try {
