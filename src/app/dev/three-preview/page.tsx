@@ -76,8 +76,10 @@ export default function ThreePreviewPage() {
   const [vendorSubtotal, setVendorSubtotal] = useState<number | null>(null);
   const [vendorName, setVendorName] = useState<string | null>(null);
   const [provider, setProvider] = useState<'homeDepot'|'boardFoot'>('homeDepot');
+  const [quoteLoading, setQuoteLoading] = useState(false);
   async function getLiveQuote() {
     try {
+      setQuoteLoading(true);
       if (!spec) return;
       const parts = computeParts(spec);
       const body = { parts: parts.map(p => ({ ...p })), species, provider };
@@ -85,6 +87,7 @@ export default function ThreePreviewPage() {
       const j = await r.json();
       if (r.ok) { setVendorSubtotal(j.subtotalUSD); setVendorName(j.vendor); }
     } catch (_) {}
+    finally { setQuoteLoading(false); }
   }
   function fmtDims(p:any){
     const Lmm=p.length, Wmm=p.width, Tmm=p.thickness;
@@ -228,7 +231,11 @@ export default function ThreePreviewPage() {
                     <option value="homeDepot">Home Depot (local)</option>
                     <option value="boardFoot">Board‑foot only</option>
                   </select>
-                  <button onClick={getLiveQuote} className="rounded border px-2 py-1 hover:bg-gray-50 dark:hover:bg-gray-900">Get live quote</button>
+                  <button onClick={getLiveQuote} disabled={!spec || quoteLoading}
+                    className={`px-3 py-1.5 rounded-lg text-sm ${(!spec || quoteLoading)
+                      ? 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                      : 'bg-black text-white hover:bg-gray-800'}`}
+                  >{quoteLoading ? 'Getting…' : 'Get live quote'}</button>
                 </div>
               </div>
               {vendorSubtotal != null && (

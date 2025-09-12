@@ -117,8 +117,10 @@ export default function Page() {
   const [vendorSubtotal, setVendorSubtotal] = useState<number | null>(null);
   const [vendorName, setVendorName] = useState<string | null>(null);
   const [provider, setProvider] = useState<'homeDepot'|'boardFoot'>('homeDepot');
+  const [quoteLoading, setQuoteLoading] = useState(false);
   async function getLiveQuote() {
     try {
+      setQuoteLoading(true);
       if (!specObj) return;
       const parts = computeParts(specObj);
       const body = { parts: parts.map(p => ({ ...p })), species, provider };
@@ -126,6 +128,7 @@ export default function Page() {
       const j = await r.json();
       if (r.ok) { setVendorSubtotal(j.subtotalUSD); setVendorName(j.vendor); }
     } catch (_) {}
+    finally { setQuoteLoading(false); }
   }
 
   const onRender = () => {
@@ -276,9 +279,13 @@ export default function Page() {
                     <option value="homeDepot">Home Depot (local)</option>
                     <option value="boardFoot">Board‑foot only</option>
                   </select>
-                  <button onClick={getLiveQuote} className="rounded border px-2 py-1 hover:bg-gray-50 dark:hover:bg-gray-900">Get live quote</button>
-                </div>
+                <button onClick={getLiveQuote} disabled={!specObj || quoteLoading}
+                  className={`px-3 py-1.5 rounded-lg text-sm ${(!specObj || quoteLoading)
+                    ? 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                    : 'bg-black text-white hover:bg-gray-800'}`}
+                >{quoteLoading ? 'Getting…' : 'Get live quote'}</button>
               </div>
+            </div>
               {vendorSubtotal != null && (
                 <div className="mt-2 text-sm">
                   Vendor ({vendorName}): <span className="font-medium">${vendorSubtotal.toFixed(2)}</span>
