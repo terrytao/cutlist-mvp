@@ -66,7 +66,7 @@ function extractJsonBlock(s: string): string | null {
 
 export async function POST(req: Request) {
   try {
-    const { prompt, imageUrl, lenient } = await req.json() as { prompt?: string; imageUrl?: string; lenient?: boolean };
+    const { prompt, imageUrl, lenient, includeRaw } = await req.json() as { prompt?: string; imageUrl?: string; lenient?: boolean; includeRaw?: boolean };
     if (process.env.DRY_RUN_LLM === "1") return new Response(JSON.stringify({ spec: norm(fallback()), _debug:{dryRun:true} },null,2),{headers:{'Content-Type':'application/json'}});
     if (!process.env.OPENAI_API_KEY) return new Response(JSON.stringify({error:"Missing OPENAI_API_KEY"}),{status:500});
     if (!prompt?.trim()) return new Response(JSON.stringify({error:"Missing 'prompt' in body"}),{status:400});
@@ -85,7 +85,9 @@ export async function POST(req: Request) {
     let raw = r1.choices[0]?.message?.content ?? "{}";
     try {
       const parsed = ProductionSpec.parse(JSON.parse(raw));
-      return new Response(JSON.stringify({ spec: norm(parsed), _debug:{model:(r1 as any).model, usage:r1.usage, pass:1} },null,2),{headers:{'Content-Type':'application/json'}});
+      const body = { spec: norm(parsed), _debug:{model:(r1 as any).model, usage:r1.usage, pass:1} } as any;
+      if (includeRaw) body._raw = stripCodeFences(raw);
+      return new Response(JSON.stringify(body,null,2),{headers:{'Content-Type':'application/json','Cache-Control':'no-store'}});
     } catch {
       // Lenient attempt on first pass
       if (lenient) {
@@ -93,7 +95,9 @@ export async function POST(req: Request) {
           const block = extractJsonBlock(raw);
           if (block) {
             const parsedL = ProductionSpec.parse(JSON.parse(block));
-            return new Response(JSON.stringify({ spec: norm(parsedL), _debug:{model:(r1 as any).model, usage:r1.usage, pass:1, lenient:true} },null,2),{headers:{'Content-Type':'application/json'}});
+            const body = { spec: norm(parsedL), _debug:{model:(r1 as any).model, usage:r1.usage, pass:1, lenient:true} } as any;
+            if (includeRaw) body._raw = stripCodeFences(block);
+            return new Response(JSON.stringify(body,null,2),{headers:{'Content-Type':'application/json','Cache-Control':'no-store'}});
           }
         } catch {}
       }
@@ -110,23 +114,29 @@ export async function POST(req: Request) {
       raw = r2.choices[0]?.message?.content ?? "{}";
       try {
         const parsed2 = ProductionSpec.parse(JSON.parse(raw));
-        return new Response(JSON.stringify({ spec: norm(parsed2), _debug:{model:(r2 as any).model, usage:r2.usage, pass:2} },null,2),{headers:{'Content-Type':'application/json'}});
+        const body = { spec: norm(parsed2), _debug:{model:(r2 as any).model, usage:r2.usage, pass:2} } as any;
+        if (includeRaw) body._raw = stripCodeFences(raw);
+        return new Response(JSON.stringify(body,null,2),{headers:{'Content-Type':'application/json','Cache-Control':'no-store'}});
       } catch {
         if (lenient) {
           try {
             const block2 = extractJsonBlock(raw);
             if (block2) {
               const parsed2L = ProductionSpec.parse(JSON.parse(block2));
-              return new Response(JSON.stringify({ spec: norm(parsed2L), _debug:{model:(r2 as any).model, usage:r2.usage, pass:2, lenient:true} },null,2),{headers:{'Content-Type':'application/json'}});
+              const body = { spec: norm(parsed2L), _debug:{model:(r2 as any).model, usage:r2.usage, pass:2, lenient:true} } as any;
+              if (includeRaw) body._raw = stripCodeFences(block2);
+              return new Response(JSON.stringify(body,null,2),{headers:{'Content-Type':'application/json','Cache-Control':'no-store'}});
             }
           } catch {}
         }
         // Fallback with debug context
-        const dbg = { fallback:true, sample: (raw||'').slice(0,200) };
-        return new Response(JSON.stringify({ spec: norm(fallback()), _debug:dbg },null,2),{headers:{'Content-Type':'application/json'}});
+        const dbg = { fallback:true, sample: (raw||'').slice(0,200) } as any;
+        const out:any = { spec: norm(fallback()), _debug: dbg };
+        if (includeRaw) out._raw = stripCodeFences(raw||'');
+        return new Response(JSON.stringify(out,null,2),{headers:{'Content-Type':'application/json','Cache-Control':'no-store'}});
       }
     }
   } catch (e:any) {
-    return new Response(JSON.stringify({error:e?.message||String(e)}),{status:400,headers:{'Content-Type':'application/json'}});
+    return new Response(JSON.stringify({error:e?.message||String(e)}),{status:400,headers:{'Content-Type':'application/json','Cache-Control':'no-store'}});
   }
 }

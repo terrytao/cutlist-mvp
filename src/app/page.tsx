@@ -93,6 +93,8 @@ export default function Home() {
   const [svgNonce, setSvgNonce] = useState(0);
   // Production spec (structured) from LLM
   const [prodSpec, setProdSpec] = useState<any | null>(null);
+  const [specDebug, setSpecDebug] = useState<any | null>(null);
+  const [specRaw, setSpecRaw] = useState<string | null>(null);
   const [plateDefs, setPlateDefs] = useState<any[] | null>(null);
   const [species, setSpecies] = useState<'pine'|'maple'|'oak'|'walnut'|'plywood'>('maple');
   const [provider, setProvider] = useState<'homeDepot'|'boardFoot'|'serpApi'>('homeDepot');
@@ -274,11 +276,13 @@ export default function Home() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         cache: 'no-store',
-        body: JSON.stringify({ prompt: basePrompt, lenient: lenientJson, t: Date.now() })
+        body: JSON.stringify({ prompt: basePrompt, lenient: lenientJson, includeRaw: true, t: Date.now() })
       });
       const data = await res.json();
       if (!res.ok) throw new Error((data as any)?.error || "Spec generation failed");
       setProdSpec(data.spec);
+      setSpecDebug((data as any)._debug || null);
+      setSpecRaw((data as any)._raw || null);
       setPlateDefs(toPlatePreviews(data.spec));
       // In safe mode, prefer the stable basic preview and disable effects
       if (safeMode) { setUsePro(false); setEffects(false); }
@@ -295,10 +299,11 @@ export default function Home() {
       setError(null);
       setLoading('cutlist');
       const prompt = `${basePrompt}. ${refineTextHome}`;
-      const res = await fetch('/api/spec/production', { method: 'POST', headers: { 'Content-Type': 'application/json' }, cache: 'no-store', body: JSON.stringify({ prompt, lenient: lenientJson, t: Date.now() }) });
+      const res = await fetch('/api/spec/production', { method: 'POST', headers: { 'Content-Type': 'application/json' }, cache: 'no-store', body: JSON.stringify({ prompt, lenient: lenientJson, includeRaw: true, t: Date.now() }) });
       const data = await res.json();
       if (!res.ok) throw new Error((data as any)?.error || 'Spec generation failed');
-      setProdSpec(data.spec); setPlateDefs(toPlatePreviews(data.spec)); setRefineTextHome('');
+      setProdSpec(data.spec); setSpecDebug((data as any)._debug || null); setSpecRaw((data as any)._raw || null);
+      setPlateDefs(toPlatePreviews(data.spec)); setRefineTextHome('');
     } catch (e:any) { setError(e.message); }
     finally { setLoading(null); }
   }
@@ -467,13 +472,22 @@ export default function Home() {
           <Section title="Generated Spec (AI)" desc="Structured specification parsed from your prompt">
             <div className="overflow-auto max-h-[50vh] rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-3">
               <pre className="text-xs leading-5 whitespace-pre-wrap">{JSON.stringify(prodSpec, null, 2)}</pre>
-              {(() => {
-                try {
-                  const dbg = (prodSpec as any)?._debug;
-                  if (!dbg) return null;
-                  return <div className="mt-2 text-xs text-gray-500">Debug: {JSON.stringify(dbg)}</div>;
-                } catch { return null; }
-              })()}
+              {specDebug && (
+                <div className="mt-2 text-xs text-gray-600 dark:text-gray-300">
+                  <div>Debug: {JSON.stringify(specDebug)}</div>
+                  {(specDebug.fallback || specDebug.dryRun) && (
+                    <div className="mt-1 inline-flex items-center gap-2 px-2 py-1 rounded-md border bg-amber-50 border-amber-200 text-amber-700">
+                      Using fallback spec — model output invalid or API failed.
+                    </div>
+                  )}
+                  {specRaw && (
+                    <details className="mt-2">
+                      <summary className="cursor-pointer">Show raw model output</summary>
+                      <pre className="mt-2 text-[11px] leading-5 whitespace-pre-wrap">{specRaw}</pre>
+                    </details>
+                  )}
+                </div>
+              )}
             </div>
           </Section>
         )}
