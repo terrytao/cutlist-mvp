@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import FurniturePreview3D from '@/components/FurniturePreview3D';
+import FurniturePreview3DPro from '@/components/FurniturePreview3DPro';
 
 function normalizeSpec(spec: any) {
   if ((spec?.units || 'mm').toLowerCase() === 'in') {
@@ -102,7 +103,7 @@ export default function ThreePreviewPage() {
         {spec && (
           <section className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4">
             <div className="mb-2 text-sm text-gray-600 dark:text-gray-300">Interactive — rotate/zoom; use the Download PNG button above canvas.</div>
-            <FurniturePreview3D spec={spec} />
+            <FurniturePreview3DPro spec={spec} />
           </section>
         )}
       </div>
