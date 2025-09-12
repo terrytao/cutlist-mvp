@@ -56,6 +56,7 @@ export default function ThreePreviewPage() {
           <p className="text-sm text-gray-600 dark:text-gray-300">
             Paste a Spec JSON (mm or in). For benches, set <code>bench.slats</code>, <code>bench.slatThickness</code>, <code>bench.gap</code>.
           </p>
+          <a href="/dev" className="text-xs underline decoration-dotted text-gray-600 dark:text-gray-300">Dev index</a>
         </header>
 
         <section className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4">
