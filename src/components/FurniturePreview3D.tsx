@@ -10,6 +10,7 @@ import {
   RandomizedLight,
   RoundedBox,
 } from '@react-three/drei';
+import { EffectComposer, Bloom, Vignette, SMAA } from '@react-three/postprocessing';
 
 type Units = 'mm'|'in';
 type Spec = {
@@ -175,6 +176,13 @@ export default function FurniturePreview3D({ spec }:{ spec: Spec }) {
 
         {/* Controls */}
         <OrbitControls enablePan={false} />
+
+        {/* Postprocessing for subtle polish */}
+        <EffectComposer disableNormalPass>
+          <SMAA />
+          <Bloom intensity={0.2} mipmapBlur luminanceThreshold={0.22} luminanceSmoothing={0.35} />
+          <Vignette eskil offset={0.12} darkness={0.9} />
+        </EffectComposer>
       </Canvas>
     </div>
   );

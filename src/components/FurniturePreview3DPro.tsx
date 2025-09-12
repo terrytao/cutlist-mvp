@@ -11,6 +11,7 @@ import {
   RandomizedLight,
   useTexture
 } from '@react-three/drei';
+import { EffectComposer, Bloom, Vignette, SMAA } from '@react-three/postprocessing';
 
 type Units = 'mm'|'in';
 type Spec = {
@@ -227,6 +228,13 @@ export default function FurniturePreview3DPro({ spec, woodTop, woodLeg }: { spec
 
         {/* Controls */}
         <OrbitControls enablePan={false} enableDamping dampingFactor={0.08} />
+
+        {/* Postprocessing for nicer highlights and edges */}
+        <EffectComposer disableNormalPass>
+          <SMAA />
+          <Bloom intensity={0.25} mipmapBlur luminanceThreshold={0.2} luminanceSmoothing={0.3} />
+          <Vignette eskil offset={0.1} darkness={0.9} />
+        </EffectComposer>
       </Canvas>
     </div>
   );
