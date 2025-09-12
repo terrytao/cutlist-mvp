@@ -1,4 +1,5 @@
 import { HOME_DEPOT_VENDOR, type Species } from '@/data/pricing/home-depot';
+import { quoteWithSerpApi } from '@/lib/pricing-external';
 
 export type PartKind = 'top' | 'leg' | 'apron';
 export type QuotePart = {
@@ -70,10 +71,15 @@ export function quoteWithBoardFoot(parts: QuotePart[], species: Species, pricePe
   return { vendor: 'Board-Foot Estimator', currency: 'USD', lines, subtotalUSD, note: 'Pure board-foot estimator by species.' };
 }
 
-export type PricingProvider = 'homeDepot' | 'boardFoot';
+export type PricingProvider = 'homeDepot' | 'boardFoot' | 'serpApi';
 export function quote(parts: QuotePart[], species: Species, provider: PricingProvider = 'homeDepot'): QuoteResp {
   if (provider === 'boardFoot') {
     return quoteWithBoardFoot(parts, species, HOME_DEPOT_VENDOR.pricePerBF);
+  }
+  if (provider === 'serpApi') {
+    // SerpAPI is async; we expose a sync wrapper for API route convenience
+    // The API route should call quoteWithSerpApi directly when selected.
+    throw new Error('serpApi provider must be called via quoteWithSerpApi (async)');
   }
   return quoteWithHomeDepot(parts, species);
 }

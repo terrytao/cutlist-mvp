@@ -116,7 +116,7 @@ export default function Page() {
 
   const [vendorSubtotal, setVendorSubtotal] = useState<number | null>(null);
   const [vendorName, setVendorName] = useState<string | null>(null);
-  const [provider, setProvider] = useState<'homeDepot'|'boardFoot'>('homeDepot');
+  const [provider, setProvider] = useState<'homeDepot'|'boardFoot'|'serpApi'>('homeDepot');
   const [quoteLoading, setQuoteLoading] = useState(false);
   async function getLiveQuote() {
     try {
@@ -275,10 +275,11 @@ export default function Page() {
               <div className="mt-3 flex items-center justify-between text-xs text-gray-600 dark:text-gray-300">
                 <span>Pricing uses the selected species ($/bf). Try a local vendor quote:</span>
                 <div className="flex items-center gap-2">
-                  <select className="rounded border bg-white dark:bg-gray-950 px-2 py-1" value={provider} onChange={(e)=>setProvider(e.target.value as any)}>
-                    <option value="homeDepot">Home Depot (local)</option>
-                    <option value="boardFoot">Board‑foot only</option>
-                  </select>
+                <select className="rounded border bg-white dark:bg-gray-950 px-2 py-1" value={provider} onChange={(e)=>setProvider(e.target.value as any)}>
+                  <option value="homeDepot">Home Depot (local)</option>
+                  <option value="boardFoot">Board‑foot only</option>
+                  <option value="serpApi">Google Shopping (SerpAPI)</option>
+                </select>
                 <button onClick={getLiveQuote} disabled={!specObj || quoteLoading}
                   className={`px-3 py-1.5 rounded-lg text-sm ${(!specObj || quoteLoading)
                     ? 'bg-gray-200 text-gray-500 cursor-not-allowed'

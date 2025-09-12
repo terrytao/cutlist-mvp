@@ -75,7 +75,7 @@ export default function ThreePreviewPage() {
   }
   const [vendorSubtotal, setVendorSubtotal] = useState<number | null>(null);
   const [vendorName, setVendorName] = useState<string | null>(null);
-  const [provider, setProvider] = useState<'homeDepot'|'boardFoot'>('homeDepot');
+  const [provider, setProvider] = useState<'homeDepot'|'boardFoot'|'serpApi'>('homeDepot');
   const [quoteLoading, setQuoteLoading] = useState(false);
   async function getLiveQuote() {
     try {
@@ -230,6 +230,7 @@ export default function ThreePreviewPage() {
                   <select className="rounded border bg-white dark:bg-gray-950 px-2 py-1" value={provider} onChange={(e)=>setProvider(e.target.value as any)}>
                     <option value="homeDepot">Home Depot (local)</option>
                     <option value="boardFoot">Board‑foot only</option>
+                    <option value="serpApi">Google Shopping (SerpAPI)</option>
                   </select>
                   <button onClick={getLiveQuote} disabled={!spec || quoteLoading}
                     className={`px-3 py-1.5 rounded-lg text-sm ${(!spec || quoteLoading)

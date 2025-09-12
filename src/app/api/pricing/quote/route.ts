@@ -2,6 +2,7 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 import { quote, type QuotePart, type PricingProvider } from '@/lib/pricing';
+import { quoteWithSerpApi } from '@/lib/pricing-external';
 import type { Species } from '@/data/pricing/home-depot';
 
 type Body = { parts: QuotePart[]; species: Species; provider?: PricingProvider };
@@ -22,7 +23,12 @@ export async function POST(req: Request) {
         qty: Math.max(1, Number(p.qty) || 1),
       }));
     const provider: PricingProvider = (body.provider || 'homeDepot');
-    const res = quote(parts, species, provider);
+    let res;
+    if (provider === 'serpApi') {
+      res = await quoteWithSerpApi(parts, species);
+    } else {
+      res = quote(parts, species, provider);
+    }
     return new Response(JSON.stringify(res, null, 2), {
       headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
     });
