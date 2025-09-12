@@ -18,6 +18,23 @@ const SAMPLE_JOINS = `[
   { "type": "MORTISE_TENON", "hostPartId": "leg-fl", "hostEdge": "E", "width": 3.0,
     "mt": { "tenonThickness": 0.25, "tenonLength": 0.75, "shoulder": 0.125, "haunch": 0 } }
 ]`;
+const SPEC_COFFEE = `{
+  "units": "in",
+  "assembly": { "type": "coffee table", "overall": { "W": 24, "D": 24, "H": 18 } }
+}`;
+const SPEC_BENCH = `{
+  "units": "in",
+  "assembly": { "type": "garden bench", "overall": { "W": 60, "D": 12, "H": 18 } },
+  "bench": { "slats": 8, "slatThickness": 18, "gap": 6 }
+}`;
+const JOINS_MT = `[
+  { "type": "MORTISE_TENON", "hostPartId": "leg-fl", "hostEdge": "E", "width": 3.0,
+    "mt": { "tenonThickness": 0.25, "tenonLength": 0.75, "shoulder": 0.125 } }
+]`;
+const JOINS_PANEL = `[
+  { "type": "DADO", "axis": "X", "offset": 12, "width": 0.75, "depth": 0.25 },
+  { "type": "GROOVE", "axis": "Y", "offset": 8, "width": 0.25, "depth": 0.25 }
+]`;
 
 function toMM(v: unknown): number {
   const n = Number(v);
@@ -98,7 +115,7 @@ export default function Page() {
         </div>
       </section>
 
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 flex-wrap">
         <button
           onClick={onRender}
           className="px-4 py-2 rounded-lg bg-black text-white hover:bg-gray-800 text-sm"
@@ -110,6 +127,34 @@ export default function Page() {
           Show Pro visualization (no cuts)
         </label>
         {error && <span className="text-sm text-red-600">{error}</span>}
+        <div className="flex items-center gap-2 ml-auto">
+          <span className="text-xs text-gray-500">Spec presets:</span>
+          <button
+            onClick={() => setSpecText(SPEC_COFFEE)}
+            className="inline-flex items-center justify-center rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-950 hover:bg-gray-50 dark:hover:bg-gray-900 px-2.5 py-1.5 text-xs"
+          >
+            Coffee
+          </button>
+          <button
+            onClick={() => setSpecText(SPEC_BENCH)}
+            className="inline-flex items-center justify-center rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-950 hover:bg-gray-50 dark:hover:bg-gray-900 px-2.5 py-1.5 text-xs"
+          >
+            Bench
+          </button>
+          <span className="text-xs text-gray-500 ml-3">Joins presets:</span>
+          <button
+            onClick={() => setJoinsText(JOINS_MT)}
+            className="inline-flex items-center justify-center rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-950 hover:bg-gray-50 dark:hover:bg-gray-900 px-2.5 py-1.5 text-xs"
+          >
+            M/T
+          </button>
+          <button
+            onClick={() => setJoinsText(JOINS_PANEL)}
+            className="inline-flex items-center justify-center rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-950 hover:bg-gray-50 dark:hover:bg-gray-900 px-2.5 py-1.5 text-xs"
+          >
+            Dados/Groove
+          </button>
+        </div>
       </div>
 
       {specObj && joinsObj && (

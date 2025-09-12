@@ -22,6 +22,15 @@ export default function ThreePreviewPage() {
     assembly: { type: 'garden bench', overall: { W: 60, D: 12, H: 18 } },
     bench: { slats: 8, slatThickness: 18, gap: 6 }
   };
+  const presetCoffeeTable = {
+    units: 'in',
+    assembly: { type: 'coffee table', overall: { W: 24, D: 24, H: 18 } }
+  };
+  const presetBench = {
+    units: 'in',
+    assembly: { type: 'garden bench', overall: { W: 60, D: 12, H: 18 } },
+    bench: { slats: 8, slatThickness: 18, gap: 6 }
+  };
 
   const [text, setText] = useState(JSON.stringify(example, null, 2));
   const [spec, setSpec] = useState<any | null>(null);
@@ -57,7 +66,7 @@ export default function ThreePreviewPage() {
             className="w-full rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-950 px-3 py-2 text-sm font-mono leading-5 focus:ring-2 focus:ring-black dark:focus:ring-white"
             spellCheck={false}
           />
-          <div className="mt-3 flex items-center gap-3">
+          <div className="mt-3 flex items-center gap-3 flex-wrap">
             <button
               onClick={onRender}
               className="inline-flex items-center justify-center rounded-lg bg-black text-white hover:bg-gray-800 px-4 py-2 text-sm"
@@ -70,6 +79,21 @@ export default function ThreePreviewPage() {
             >
               Load sample
             </button>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-gray-500">Presets:</span>
+              <button
+                onClick={() => { setText(JSON.stringify(presetCoffeeTable, null, 2)); setErr(''); }}
+                className="inline-flex items-center justify-center rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-950 hover:bg-gray-50 dark:hover:bg-gray-900 px-3 py-1.5 text-xs"
+              >
+                Coffee table
+              </button>
+              <button
+                onClick={() => { setText(JSON.stringify(presetBench, null, 2)); setErr(''); }}
+                className="inline-flex items-center justify-center rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-950 hover:bg-gray-50 dark:hover:bg-gray-900 px-3 py-1.5 text-xs"
+              >
+                Bench
+              </button>
+            </div>
             {err && <span className="text-sm text-red-600">{err}</span>}
           </div>
         </section>
