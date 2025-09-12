@@ -74,6 +74,7 @@ export default function Home() {
   const [style, setStyle] = useState("Product render (clean, neutral light)");
   const [imgSize, setImgSize] = useState<"1024x1024"|"1024x1536"|"1536x1024"|"auto">("1024x1024");
   const [lenientJson, setLenientJson] = useState(true);
+  const [viewKey, setViewKey] = useState(0);
   const [units, setUnits] = useState<"in"|"mm">("in");
   const current = rounds[idx] || { images: [], selected: null };
 
@@ -237,6 +238,31 @@ export default function Home() {
       setRounds([{ images: data.images, selected: null, note: "base" }]); setIdx(0);
     } catch (e:any) { setError(e.message); }
     finally { setLoading(null); refreshTrial(); }
+  }
+
+  // Clear all UI state and force a fresh remount
+  function clearAll() {
+    try {
+      setBasePrompt("");
+      setRefineTextHome("");
+      setRounds([]);
+      setIdx(0);
+      setLoading(null);
+      setError(null);
+      setSpec(null);
+      setShowSvg(false);
+      setSvgNonce(0);
+      setProdSpec(null);
+      setPlateDefs(null);
+      setEffects(false);
+      setUsePro(false);
+      setSafeMode(true);
+      setVendorSubtotal(null);
+      setVendorName(null);
+      setVendorLines(null);
+    } finally {
+      setViewKey((k) => k + 1);
+    }
   }
 
   // One-click: Generate Production Spec and preview (furniture + joinery)
@@ -411,7 +437,7 @@ export default function Home() {
         </div>
       </header>
 
-      <main className="max-w-6xl mx-auto px-4 py-6 space-y-6">
+      <main key={viewKey} className="max-w-6xl mx-auto px-4 py-6 space-y-6">
         {/* Prompt → Spec (ChatGPT) */}
         <div className="relative overflow-hidden rounded-2xl border border-sky-100/70 dark:border-sky-900/40 bg-gradient-to-br from-sky-50 to-indigo-50 dark:from-sky-950/30 dark:to-indigo-950/30 p-5 sm:p-6">
           <div className="space-y-3">
@@ -431,6 +457,7 @@ export default function Home() {
               <label className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-300">
                 <input type="checkbox" checked={lenientJson} onChange={(e)=>setLenientJson(e.target.checked)} /> Lenient JSON parse
               </label>
+              <Btn variant="ghost" onClick={clearAll} className="ml-auto">Clear all</Btn>
               <a href="/dev" className="text-sm underline decoration-dotted text-gray-600 dark:text-gray-300">Dev tools</a>
             </div>
           </div>
