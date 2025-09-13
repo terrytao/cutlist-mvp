@@ -4,7 +4,7 @@
 import * as THREE from 'three';
 import React, { useMemo, useEffect, useState, Suspense } from 'react';
 import { Canvas } from '@react-three/fiber';
-import { OrbitControls } from '@react-three/drei';
+import { OrbitControls, RoundedBox } from '@react-three/drei';
 import { EffectComposer, Bloom, Vignette } from '@react-three/postprocessing';
 
 // ---------- Safe helpers (prevent undefined/NaN from reaching r3f) ----------
@@ -66,6 +66,7 @@ function Model({
   woodLeg?: WoodTex;
   palette?: { top?: string; leg?: string; apron?: string; slat?: string };
 }) {
+  const extras = (spec as any)?.extras || {};
   const { W, D, H } = safeToMM(spec);
   const safe = (n: number, def: number) => (Number.isFinite(n) && n > 0 ? n : def);
   const Wm = safe(mmToMeters(W), 0.6),
@@ -101,10 +102,16 @@ function Model({
   return (
     <group>
       {/* Top */}
-      <mesh position={topPos} castShadow receiveShadow>
-        <boxGeometry args={[Wm, Dm, topThk]} />
-        <primitive object={matTop} attach="material" />
-      </mesh>
+      {extras.topRounded ? (
+        <RoundedBox args={[Wm, Dm, topThk]} radius={Math.min(0.02, topThk * 0.3)} smoothness={3} position={topPos} castShadow receiveShadow>
+          <primitive object={matTop} attach="material" />
+        </RoundedBox>
+      ) : (
+        <mesh position={topPos} castShadow receiveShadow>
+          <boxGeometry args={[Wm, Dm, topThk]} />
+          <primitive object={matTop} attach="material" />
+        </mesh>
+      )}
 
       {/* Optional bench slats */}
       {isBench && slatCount > 0 && (
@@ -124,12 +131,25 @@ function Model({
       )}
 
       {/* Legs */}
-      {legPositions.map((p, i) => (
-        <mesh key={i} position={p} castShadow receiveShadow>
-          <boxGeometry args={[legThk, legThk, Hm - topThk]} />
-          <primitive object={matLeg} attach="material" />
-        </mesh>
-      ))}
+      {legPositions.map((p, i) => {
+        if (extras.legTaper) {
+          const rTop = Math.max(0.005, legThk * 0.35);
+          const rBot = Math.max(rTop, legThk * 0.5);
+          const h = Hm - topThk;
+          return (
+            <mesh key={i} position={p} rotation={[0, Math.PI/4, 0]} castShadow receiveShadow>
+              <cylinderGeometry args={[rTop, rBot, h, 4]} />
+              <primitive object={matLeg} attach="material" />
+            </mesh>
+          );
+        }
+        return (
+          <mesh key={i} position={p} castShadow receiveShadow>
+            <boxGeometry args={[legThk, legThk, Hm - topThk]} />
+            <primitive object={matLeg} attach="material" />
+          </mesh>
+        );
+      })}
 
       {/* Aprons: front & right */}
       <mesh position={[Wm / 2, legThk / 2, apronZ]} castShadow receiveShadow>
@@ -140,6 +160,14 @@ function Model({
         <boxGeometry args={[legThk, Dm - 2 * legThk, apronH]} />
         <primitive object={matApr} attach="material" />
       </mesh>
+
+      {/* Optional shelf (if present in spec extras) */}
+      {extras.shelf && (
+        <mesh position={[Wm/2, Dm/2, Math.max(legThk*1.2, Hm*0.35)]} castShadow receiveShadow>
+          <boxGeometry args={[Wm - 2*legThk, Dm - 2*legThk, Math.min(0.02, Math.max(0.012, topThk*0.6))]} />
+          <primitive object={matTop} attach="material" />
+        </mesh>
+      )}
     </group>
   );
 }

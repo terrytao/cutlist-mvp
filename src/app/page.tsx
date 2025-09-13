@@ -138,7 +138,13 @@ export default function Home() {
     const W = Number(o.W) || 600, D = Number(o.D) || 600, H = Number(o.H) || 450;
     const overall = { W, D, H };
     const type = ps.metadata?.type || ps.assembly?.type || "project";
-    return { units, assembly: { type, overall } };
+    // Extras from spec heuristics
+    const hasShelf = Array.isArray(ps.cutlist) && ps.cutlist.some((p:any)=> String(p.name||'').toLowerCase().includes('shelf'));
+    const title = String(ps.metadata?.title||'').toLowerCase();
+    const anyName = (Array.isArray(ps.cutlist)?ps.cutlist:[]).map((p:any)=>String(p.name||'').toLowerCase()).join(' ');
+    const legTaper = /taper/.test(title) || /taper/.test(anyName);
+    const topRounded = /round/.test(title) || /rounded/.test(title) || /round/.test(anyName) || /rounded/.test(anyName);
+    return { units, assembly: { type, overall }, extras: { shelf: hasShelf, legTaper, topRounded } };
   }
 
   function isValidPreviewSpec(s: any) {
