@@ -139,12 +139,35 @@ export default function Home() {
     const overall = { W, D, H };
     const type = ps.metadata?.type || ps.assembly?.type || "project";
     // Extras from spec heuristics
-    const hasShelf = Array.isArray(ps.cutlist) && ps.cutlist.some((p:any)=> String(p.name||'').toLowerCase().includes('shelf'));
+    const parts = Array.isArray(ps.cutlist) ? ps.cutlist : [];
+    const joins = Array.isArray(ps.joins) ? ps.joins : [];
+    const hasShelf = parts.some((p:any)=> String(p.name||'').toLowerCase().includes('shelf'));
     const title = String(ps.metadata?.title||'').toLowerCase();
-    const anyName = (Array.isArray(ps.cutlist)?ps.cutlist:[]).map((p:any)=>String(p.name||'').toLowerCase()).join(' ');
+    const anyName = parts.map((p:any)=>String(p.name||'').toLowerCase()).join(' ');
     const legTaper = /taper/.test(title) || /taper/.test(anyName);
     const topRounded = /round/.test(title) || /rounded/.test(title) || /round/.test(anyName) || /rounded/.test(anyName);
-    return { units, assembly: { type, overall }, extras: { shelf: hasShelf, legTaper, topRounded } };
+    const roundedLegs = /round leg/.test(title) || /round leg/.test(anyName) || /round legs/.test(title+anyName);
+    // Taper strength
+    const taperStrength = /heavy taper/.test(title+anyName) ? 'heavy' : /light taper/.test(title+anyName) ? 'light' : legTaper ? 'medium' : null;
+    // Bevel/chamfer top
+    const bevelTop = /bevel/.test(title+anyName) || /chamfer/.test(title+anyName);
+    // Shelf position
+    const shelfPos = hasShelf ? (/lower|bottom/.test(title+anyName) ? 'low' : /mid|middle/.test(title+anyName) ? 'mid' : 'low') : null;
+    // Shelf thickness from parts
+    const shelfPart = parts.find((p:any)=> String(p.name||'').toLowerCase().includes('shelf'));
+    const shelfThk = shelfPart ? Number(shelfPart.thickness)||null : null;
+    // Apron height override from join width or apron part width
+    let apronH: number | null = null;
+    const mt = joins.find((j:any)=> j.type==='MORTISE_TENON' && j.width);
+    if (mt && Number(mt.width)>0) apronH = Number(mt.width);
+    if (!apronH) {
+      const apronPart = parts.find((p:any)=> String(p.name||'').toLowerCase().includes('apron'));
+      if (apronPart && Number(apronPart.width)>0) apronH = Number(apronPart.width);
+    }
+    // Stretchers detection
+    const hasStretcher = parts.some((p:any)=> String(p.name||'').toLowerCase().includes('stretcher')) || /stretcher/.test(title+anyName);
+
+    return { units, assembly: { type, overall }, extras: { shelf: hasShelf, shelfPos, shelfThk, legTaper, taperStrength, topRounded, bevelTop, roundedLegs, apronH, stretcher: hasStretcher } };
   }
 
   function isValidPreviewSpec(s: any) {

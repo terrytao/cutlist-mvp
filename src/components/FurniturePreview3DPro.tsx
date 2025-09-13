@@ -75,7 +75,7 @@ function Model({
   const params = derive(spec, Wm, Dm, Hm);
   const topThk = safe(params.topThk, 0.02);
   const legThk = safe(params.legThk, 0.05);
-  const apronH = safe(params.apronH, 0.09);
+  const apronH = safe((extras.apronH ? mmToMeters(extras.apronH) : params.apronH), 0.09);
   const apronDrop = safe(params.apronDrop, 0.1);
   const isBench = params.isBench;
   const slatCount = Number.isFinite(params.slats) ? Math.max(0, Math.floor(params.slats as number)) : 0;
@@ -102,7 +102,7 @@ function Model({
   return (
     <group>
       {/* Top */}
-      {extras.topRounded ? (
+      {(extras.topRounded || extras.bevelTop) ? (
         <RoundedBox args={[Wm, Dm, topThk]} radius={Math.min(0.02, topThk * 0.3)} smoothness={3} position={topPos} castShadow receiveShadow>
           <primitive object={matTop} attach="material" />
         </RoundedBox>
@@ -132,13 +132,18 @@ function Model({
 
       {/* Legs */}
       {legPositions.map((p, i) => {
-        if (extras.legTaper) {
-          const rTop = Math.max(0.005, legThk * 0.35);
-          const rBot = Math.max(rTop, legThk * 0.5);
+        const wantRound = !!extras.roundedLegs;
+        const strength = (extras.taperStrength || (extras.legTaper ? 'medium':'none')) as 'light'|'medium'|'heavy'|'none';
+        if (strength !== 'none' || wantRound) {
+          const ratio = strength==='heavy'? 0.5 : strength==='light'? 0.85 : 0.7;
+          const rBot = Math.max(0.006, legThk * 0.5);
+          const rTop = Math.max(0.005, rBot * ratio);
           const h = Hm - topThk;
+          const segs = wantRound ? 16 : 4;
+          const rot = wantRound ? 0 : Math.PI/4;
           return (
-            <mesh key={i} position={p} rotation={[0, Math.PI/4, 0]} castShadow receiveShadow>
-              <cylinderGeometry args={[rTop, rBot, h, 4]} />
+            <mesh key={i} position={p} rotation={[0, rot, 0]} castShadow receiveShadow>
+              <cylinderGeometry args={[rTop, rBot, h, segs]} />
               <primitive object={matLeg} attach="material" />
             </mesh>
           );
@@ -163,10 +168,24 @@ function Model({
 
       {/* Optional shelf (if present in spec extras) */}
       {extras.shelf && (
-        <mesh position={[Wm/2, Dm/2, Math.max(legThk*1.2, Hm*0.35)]} castShadow receiveShadow>
-          <boxGeometry args={[Wm - 2*legThk, Dm - 2*legThk, Math.min(0.02, Math.max(0.012, topThk*0.6))]} />
+        <mesh position={[Wm/2, Dm/2, extras.shelfPos==='mid' ? Hm*0.5 : Math.max(legThk*1.2, Hm*0.28)]} castShadow receiveShadow>
+          <boxGeometry args={[Wm - 2*legThk, Dm - 2*legThk, Math.min(0.02, Math.max(0.012, (extras.shelfThk? mmToMeters(extras.shelfThk): topThk*0.6)))]} />
           <primitive object={matTop} attach="material" />
         </mesh>
+      )}
+
+      {/* Optional stretchers near bottom */}
+      {extras.stretcher && (
+        <>
+          <mesh position={[Wm/2, legThk/2, Math.max(0.08, Hm*0.2)]} castShadow receiveShadow>
+            <boxGeometry args={[Wm - 2*legThk, legThk*0.7, Math.min(0.08, apronH*0.5)]} />
+            <primitive object={matApr} attach="material" />
+          </mesh>
+          <mesh position={[Wm - legThk/2, Dm/2, Math.max(0.08, Hm*0.2)]} castShadow receiveShadow>
+            <boxGeometry args={[legThk*0.7, Dm - 2*legThk, Math.min(0.08, apronH*0.5)]} />
+            <primitive object={matApr} attach="material" />
+          </mesh>
+        </>
       )}
     </group>
   );
